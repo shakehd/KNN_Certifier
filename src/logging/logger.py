@@ -5,8 +5,9 @@ from multiprocessing import Process, Manager
 from queue import Queue
 from typing import Any, ClassVar, Self
 from logging import LogRecord, handlers
+from os.path import join
 
-from src.abstract.classifier import AbstractClassifier
+from src.abstract.abstract_classifier import AbstractClassifier
 
 class ProcessLogger(Process):
   _logger: ClassVar[ProcessLogger | None] = None

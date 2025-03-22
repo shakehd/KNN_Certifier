@@ -14,14 +14,26 @@ from ..space.hyperplane import Hyperplane
 class AdvRegion:
   point: NDVector
   epsilon: float = field(default_factory=float)
+  dataset_props: DatasetProps = field(default_factory=DatasetProps)
   num_adv_region: list[Interval] = field(init=False)
 
   def __post_init__(self: Self) -> None:
     self.num_adv_region = []
 
-    for num_feature in self.point[DatasetProps.num_features_start_ix:]:
-      self.num_adv_region.append(Interval(max(num_feature - self.epsilon, 0.0),
-                                      min(num_feature + self.epsilon, 1.0)))
+    for num_feature in self.point[self.dataset_props.num_features_start_ix:]:
+      self.num_adv_region.append(Interval(num_feature - self.epsilon, num_feature + self.epsilon,))
+
+  def lower_bound(self:Self) -> NDVector:
+    dir = np.zeros((self.dataset_props.columns, ))
+    dir[self.dataset_props.num_features_start_ix:] = -1
+
+    return self.point + dir*self.epsilon
+
+  def upper_bound(self:Self) -> NDVector:
+    dir = np.zeros((self.dataset_props.columns, ))
+    dir[self.dataset_props.num_features_start_ix:] = 1
+
+    return self.point + dir*self.epsilon
 
   def get_closer(self: Self, bisector: Hyperplane) -> Closer:
     point_side = np.sign(bisector(self.point))
@@ -30,15 +42,15 @@ class AdvRegion:
       return Closer.BOTH
 
     if point_side > 0 :
-      dir = -bisector.coefficients[DatasetProps.num_features_start_ix:].copy()
+      dir = -bisector.coefficients[self.dataset_props.num_features_start_ix:].copy()
       closer = Closer.SECOND
     else:
-      dir = bisector.coefficients[DatasetProps.num_features_start_ix:].copy()
+      dir = bisector.coefficients[self.dataset_props.num_features_start_ix:].copy()
       closer = Closer.FIRST
 
-    dir = np.hstack([np.zeros((DatasetProps.num_features_start_ix, )), dir])
+    dir = np.hstack([np.zeros((self.dataset_props.num_features_start_ix, )), dir])
 
-    continuous_part = dir[DatasetProps.num_features_start_ix:]
+    continuous_part = dir[self.dataset_props.num_features_start_ix:]
     continuous_part[continuous_part == 0] = 1
     target_vertex = self.point + np.sign(dir)*self.epsilon
 
@@ -50,7 +62,7 @@ class AdvRegion:
   def get_bounds(self: Self) -> Sequence[tuple[float, float| None]]:
     bounds: list[tuple[float, float | None]] = []
 
-    for cat_feature in DatasetProps.cat_features.values():
+    for cat_feature in self.dataset_props.cat_features.values():
       if cat_feature.size == 2:
          bounds.append((0, None))
       else:
@@ -59,31 +71,40 @@ class AdvRegion:
     return bounds + [(interval.lb, interval.ub) for interval in self.num_adv_region]
 
   def get_equality_constraints(self: Self) -> tuple[ArrayNxM, Array1xN]:
-    eq_lhs: ArrayNxM = np.zeros((len(DatasetProps.cat_features), DatasetProps.columns))
+    eq_lhs: ArrayNxM = np.zeros((len(self.dataset_props.cat_features), self.dataset_props.columns))
     eq_rhs: list[float] = []
-    for ix in range(len(DatasetProps.cat_features)):
+    for ix in range(len(self.dataset_props.cat_features)):
       eq_lhs[ix][ix] = 1.0
       eq_rhs.append(self.point[ix])
 
     return eq_lhs, np.array(eq_rhs)
 
+  def __str__(self: Self) -> str:
+    fixed_part: list[str] = [f"{self.point[i]}"
+                                for i in range(0, self.dataset_props.num_features_start_ix)]
+    perturbation_part: list[str] = [f"[{inter.lb}-{inter.ub}]" for inter in self.num_adv_region]
+    return '['+ ', '.join(fixed_part + perturbation_part)
+
+
+
 @dataclass
 class Perturbation:
   point: NDVector
   epsilon: float = field(default_factory=float)
+  dataset_props: DatasetProps = field(default_factory=DatasetProps)
   num_adv_region: list[Interval] = field(init=False)
 
   def __post_init__(self: Self) -> None:
     self.num_adv_region = []
 
-    for num_feature in self.point[DatasetProps.num_features_start_ix:]:
+    for num_feature in self.point[self.dataset_props.num_features_start_ix:]:
       self.num_adv_region.append(Interval(max(num_feature - self.epsilon, 0.0),
                                       min(num_feature + self.epsilon, 1.0)))
 
   def get_adversarial_regions(self: Self) -> Iterator[AdvRegion]:
     cat_possible_values: list[list[list[float]]] = []
 
-    cat_to_perturb = [cat for cat in DatasetProps.cat_features.values()
+    cat_to_perturb = [cat for cat in self.dataset_props.cat_features.values()
                           if cat.perturb]
 
     if cat_to_perturb:
@@ -109,6 +130,6 @@ class Perturbation:
           self.point[fixed_cat_start_idx:],
         )))
 
-        yield AdvRegion(point, self.epsilon)
+        yield AdvRegion(point, self.epsilon, self.dataset_props)
     else:
-      yield AdvRegion(self.point, self.epsilon)
+      yield AdvRegion(self.point, self.epsilon, self.dataset_props)

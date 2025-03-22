@@ -1,9 +1,8 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Any, List, Optional, Self
+from typing import Any, List,  Self
 
 from sklearn.metrics import DistanceMetric
-from src.dataset.dataset import DatasetProps
 from src.utils.base_types import Array1xN, NDVector
 import numpy as np
 

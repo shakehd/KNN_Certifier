@@ -20,17 +20,34 @@ class CatFeature:
   size: int
   perturb: bool
 
+# @dataclass
+# class DatasetProps:
+#   columns: ClassVar[int] = 0
+#   cat_features: ClassVar[dict[int, CatFeature]] = {}
+#   num_features_ix: ClassVar[list[int]] = []
+
+#   num_features_start_ix: ClassVar[int] = field(default=0)
+
+#   @classmethod
+#   def has_categories(cls: type[DatasetProps]) -> bool:
+#     return bool(cls.cat_features)
+
+# @dataclass
+# class Dataset:
+#   points: ArrayNxM
+#   labels: NDVector
+
 @dataclass
 class DatasetProps:
-  columns: ClassVar[int] = 0
-  cat_features: ClassVar[dict[int, CatFeature]] = {}
-  num_features_ix: ClassVar[list[int]] = []
+  columns: int = field(default_factory=int)
+  cat_features: dict[int, CatFeature] = field(default_factory=dict)
+  num_features_ix: list[int] = field(default_factory=list)
 
-  num_features_start_ix: ClassVar[int] = field(default=0)
+  num_features_start_ix: int = field(default=0)
 
-  @classmethod
-  def has_categories(cls: type[DatasetProps]) -> bool:
-    return bool(cls.cat_features)
+
+  def has_categories(self: Self) -> bool:
+    return bool(self.cat_features)
 
 @dataclass
 class Dataset:
