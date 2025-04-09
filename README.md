@@ -53,8 +53,8 @@ For example
 ```[bash]
 python certify.py fourclass_5_percent --partition-size 100 --log info
 ```
-[!WARNING]
-For parallizzation the FORK method is used. Since this is only available in Unix systems this tool will not work on windows systems.
+**Warning**
+For parallizzation the FORK method is used. Since this is only available in Unix systems this tool will not work on windows systems --no-parallel option is not set.
 
 ## Results
 After the certification process is finished the tool will save the results in 4 files:
