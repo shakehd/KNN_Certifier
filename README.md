@@ -45,14 +45,16 @@ can be one of the following:
 | --partition-size SIZE | Maximum number of data points in a partition (default 100). |
 | --log  {INFO,DEBUG,ERROR}  | Log level used during the verification phase (default ERROR).  |
 | --all-labels  | Compute all labels. (default False)  |
-| --no-parallel | Classify points sequentially.  |
+| --no-parallel | Classify points sequentially (default False).  |
 | -h, --help  | Show help message and exit.  |
 
 For example
 
 ```[bash]
-python python certify.py fourclass_5_percent --partition-size 100 --log info
+python certify.py fourclass_5_percent --partition-size 100 --log info
 ```
+[!WARNING]
+For parallizzation the FORK method is used. Since this is only available in Unix systems this tool will not work on windows systems.
 
 ## Results
 After the certification process is finished the tool will save the results in 4 files:
