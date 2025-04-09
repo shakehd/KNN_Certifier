@@ -23,7 +23,7 @@ class Result:
   stability_count: NDVector
 
 def classify_point(abstract_classifier: AbstractClassifier, num_point:int, test_point: ArrayNxM, test_label:int,
-                   params: Configuration, dataset_props: DatasetProps) -> Result:
+                   params: Configuration, dataset_props: DatasetProps, all_labels: bool = True) -> Result:
   try:
 
     AbstractClassifier.point_number = num_point
@@ -38,7 +38,7 @@ def classify_point(abstract_classifier: AbstractClassifier, num_point:int, test_
 
     perturbation = Perturbation(test_point, epsilon, dataset_props)
     clock_st: float = time.time()
-    labels = abstract_classifier.get_classification(perturbation, k_values)
+    labels = abstract_classifier.get_classification(perturbation, k_values, all_labels)
     elapsed_clock: float = time.time() - clock_st
     logger.info(f"Classification time: {elapsed_clock}")
     classification_result: list[str]  = [str(num_point), str(test_label)]

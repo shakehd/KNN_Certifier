@@ -1,0 +1,11 @@
+[knn_params]
+k_values = [1, 2, 3, 5, 7]
+distance_metric = "euclidean"
+
+[dataset]
+format = "libsvm"
+training_set = "pendigits"
+test_set = "pendigits.t"
+
+[abstraction]
+epsilon = 0.07

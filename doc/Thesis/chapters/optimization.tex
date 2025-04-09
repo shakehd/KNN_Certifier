@@ -1,0 +1,254 @@
+%!TEX root = ../dissertation.tex
+
+\chapter{Optimizations}
+\label{chp:optimizations}
+
+One issue with certifier is that it is not really efficient. One reason for this is the construction of the adversarial proximity precedence graph which is done by iterating over all the pairs of samples in $\set$.  Building the graph thus costs $O(n^2)$ where $n$ is the number of samples in $\set$, but it hides an important constant which is the dimension of the feature space. Another reason is the algorithm itself, which is quite inefficient because it explicitly enumerates all the possible paths of length $k$ within the \acs{APP-G} before computing the set of labels. For instance consider a dataset with $n$ samples equidistant from the adversarial region $\pert$ then in this case the graph of could contain at least
+\[
+  \frac{n!}{(n-k)!}
+\]
+adversarially valid paths with $k$ samples. This means that just for small values such as $n=10$ and $k=7$ the certifier could potentially iterate over more than $10^6$ paths before starting to compute the set of labels. This chapter explores some optimizations to mitigate these inefficiencies.
+
+\section{\acs{APP-G} Construction Optimizations}
+\label{sec:graph-construction-optimizations}
+
+One way to optimize the construction of the \acs{APP-G} is to use only the samples in the neighborhood of the input sample, as not all are needed for the classification. The following result provides a sufficient condition to ensure that the selected samples include the $k$ nearest neighbors of every point in the input's adversarial region.
+
+\begin{proposition}
+\label{prop:sound-sample-selection}
+Given a dataset $\set$ and the adversarial region $\pert$ of input sample $\vinput$, let $d$ be the distance between $\vinput$ and its $k$-th closest sample. Then, the hypersphere centered at $\vinput$ with radius $\displaystyle 2\epsilon\sqrt{N} + d$, where $N$ is the dimension of the feature space, includes the $k$ nearest neighbors of every point within $\pert$.
+\end{proposition}
+\begin{proof}
+Given the set $A = \{\sample[1], \sample[2],\ldots,\sample[k]\}$ of the $k$ nearest neighbor to the input sample, where $\sample[k]$ is the $k$-th nearest, let $\x[]' \in \pert$ be an arbitrary point of the adversarial region. Consider the hypersphere $H_{\x[]'}$ centered in $\x[]'$ and radius $\norm{\x[]' - \sample[{\x[]'}]}$ where $\sample[{\x[]'}] = \argmax_{\sample \in A} \norm{\x[]' - \sample}$ (i.e, $\sample[{\x[]'}]$ is the farthest of the $k$ nearest neighbors of $\vinput$ from $\x[]'$). By definition, $H_{\x[]'}$ contains all the sample in $A$. Since the radius of $H_{\x[]'}$ is the distance from $\x[]'$ to the farthest point in $A$, any sample closer to $\x[]'$ than any sample in $A$ will also be contained within $H_{\x[]'}$. Therefore, $H_{\x[]'}$ contains at least the k nearest neighbors to $\x[]'$.
+
+\noindent Let $H$ be hypersphere centered ar $\vinput$ that encloses all hyperspheres $H_{\x[]'}$ for every $\x[]' \in \pert$. Consequently, $H$ surely contain all the $k$ nearest samples to each point within the adversarial region. To determine the radius of $H$ observe that given $\vec{y} \in \R$ and $\x[]' \in \pert$
+\[
+  \norm{\x[]' - \vec{y}} \le \norm{\vinput - \x[]'} + \norm{\vinput - \vec{y}}
+\]
+due to the triangular inequality property of norms. Therefore, for every $\x[]' \in \pert$
+\[
+\norm{\x[]' - \sample[{\x[]'}]} \le \norm{\vinput - \x[]'} + \norm{\vinput - \sample[{\x[]'}]} \le \norm{\vinput - \x[]'} + \norm{\vinput - \sample[k]} \le \epsilon\sqrt{N}  + d
+\]
+Since the maximum radius of $H_{\x[]'}$ for any $\x[]' \in \pert$ is $\epsilon\sqrt{N} \epsilon + d$ and distance between the centers of $H$ and any $H_{\x[]'}$ is at most $\epsilon\sqrt{N}$, the radius of hypersphere $H$ must be $\displaystyle \epsilon\sqrt{N} + d + \epsilon\sqrt{N} = 2\epsilon\sqrt{N} + d$.
+\end{proof}
+
+\noindent An efficient approach to selecting samples in the neighborhood of the input is the following:
+\begin{enumerate}
+  \item Partition the dataset $\set$ such that each partition contain at most $m$ of samples where $k \le m \ll |\set|$;
+  \item Find the partition $P$ containing the input $\vinput$;
+  \item Compute the distance $d$ between the $\vinput$ and its $k$-th closest sample in $P$;
+  \item Find the partitions $Ps$ intersecting the hypersphere centered at  $\vinput$ with radius
+  \[
+    2\epsilon\sqrt{N} + d
+  \]
+  where $\epsilon$ and $N$ are the perturbation magnitude and the dimension of the feature space respectively.
+\end{enumerate}
+\noindent This procedure, as demonstrated \autoref{prop:sound-sample-selection}, allows us to select a subset of samples that contains the k nearest neighbors of every point in the input's adversarial region.
+
+\subsection{Dataset partitioning}
+The dataset is partitioned using a binary space partition (BSP) scheme \cite{bsp-tree}. This involves recursively partitioning the hyperspace into two halves along hyperplanes until a specified criterion is met. This subdivision process creates a hierarchy of regions modeled by a geometric data structure known as a BSP tree, in which objects in space are organized in the form of a binary tree. The leaves of this tree represent the resulting spatial partitions, and the internal nodes represent the splits according to the hyperplanes used during the partitioning process. For our purposes we used random projections \cite{random-projection} (i.e., random hyperplanes) to split the space, and stop partitioning when the number of samples in the partition is at most $m$, where $k \le m \ll |\set|$.
+
+\autoref{alg:build-bsptree} shows how the BSP tree is constructed. Given a dataset $\set$ and a maximum partition size $m$, the algorithm first checks whether the size of the dataset is less than $m$. If so, it returns a tree consisting of a single leaf initialized with the dataset $\set$ (line $1$-$2$). Otherwise, it creates a random hyperplane $\pi$ using the \textsc{SelectRandomProj} method and splits the dataset into two subsets according to  $\pi$  (line $3$-$5$). The algorithm then recursively invokes itself on the two resulting subsets to construct their respective BSP trees (line $6$-$7$). Finally, it returns a node initialized with the splitting hyperplane and the previously constructed subtrees (line $8$).
+
+
+\begin{algorithm}[H]
+	\caption[$\algtitle{BuildBSPTree}$ algorithm]{$\algtitle{BuildBSPTree}$ algorithm}
+	\label{alg:build-bsptree}
+	\begin{algorithmic}[1]
+    \Require{$\set$: A dataset, $m$: The maximum size of a partition}
+    \Ensure{A BSP tree of the dataset}
+
+    \If {$|\set| \le m$}
+      \State \Return \textsc{Leaf}(S)
+    \EndIf
+
+    \State $\pi \gets \textsc{CreateRandomProj}(\set)$
+    \State $\var{left\_dataset} \gets \{\sample[] \in \set \mid \pi(\sample[]) \le 0\}$
+    \State $\var{right\_dataset} \gets \{\sample[] \in \set \mid \pi(\sample[]) > 0\}$
+
+    \State $\var{left\_tree} \gets \algtitle{BuildBSPTree}({\var{left\_dataset}, m})$
+    \State $\var{right\_tree} \gets \algtitle{BuildBSPTree}(){\var{right\_dataset}, m})$
+
+    \State \Return $\textsc{Node}(\pi, \var{left\_tree}, \var{right\_tree})$
+	\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Random Projection Selection}
+\label{subsusb:random-projection-selesction}
+
+One way to split dataset is for example to simply pick two random samples and split the dataset using the perpendicular bisector of the two samples. Another method is to use $k$-Means with $k=2$ which will split the dataset in two and the splitting hyperplane would be the perpendicular bisector of the two cluster centers. However, neither of these strategies guarantees a balanced tree or partitions containing at least $k$ samples.
+
+To satisfy both requirements, one approach is to first partition the dataset using the perpendicular bisector of two randomly chosen points $\vec{p}_1$ and $\vec{p}_2$. The splitting hyperplane is then translated along the line segment joining $\vec{p}_1$ and $\vec{p}_2$  moving towards the point with the larger number of closer samples, until the two resulting partitions differ in size by at most one sample. With this approach $\algtitle{BuildBSPTree}$ subdivide the dataset into at most
+\[
+  2^{\left({\textstyle \ceil*{\log_2^{|S|/m}}}\right)}
+\]
+partition each of which contains at least $m-1$ samples.
+
+\subsection{Searching in the BSP Tree}
+\label{subsec:Searching-bsp-tree}
+Once constructed, the BSP tree can be used to efficiently search for samples belonging to a partition or samples within a distance $r$ of a sample of interest  $\vinput$—that is, points inside the hypersphere centered at $\vinput$ with radius $r$.
+
+\subsubsection{Samples within a Hypersphere}
+\label{subsub:samples-within-hypersphere}
+
+Samples within a hypersphere can be found by traversing the BSP tree from top to bottom, selecting only the partitions that intersect the hypersphere until leaf nodes are reached. This procedure is described by the recursive method in \autoref{alg:search-points-in-hypersphere}. Given a BSP tree $T$, a center $\vinput$, and a radius $r$ of the hypersphere, the algorithm first checks whether $T$ is a leaf node. If so, it returns the set of points within the dataset associated with $T$ that are inside the hypersphere (lines $1$-$2$). Otherwise, if the splitting hyperplane associated with $T$, denoted $T.hyperplane$, intersects the hypersphere (i.e., the distance between $\vinput$ and $T.hyperplane$ is less than $r$), the algorithm recursively calls itself on the two half-spaces induced by $T.hyperplane$ to compute the sets of points inside the hypersphere on both sides of $T.hyperplane$, and returns their union (lines $3$-$4$). However, if $T.hyperplane$ does not intersect the hypersphere, the algorithm calls itself on the half-space containing the hypersphere entirely to compute and return the set of points inside the hypersphere (lines $5$-$8$).
+
+\begin{algorithm}[h]
+	\caption[$\algtitle{SearchClosePoints}$ algorithm]{$\algtitle{SearchClosePoints}$ algorithm}
+	\label{alg:search-points-in-hypersphere}
+	\begin{algorithmic}[1]
+    \Require{$T$: A BSP tree, $\vinput$: Center of the hypersphere, $r$: Radius of the hypersphre}
+    \Ensure{Set of point inside the hypersphere}
+
+    \If {$T$ is a $\textsc{Leaf}$}
+      \State \Return $\{\sample[] \in T.dataset \mid \norm{\vinput - \sample[]} \le r\}$
+    \EndIf
+
+    \If {$\textsc{Distance}(\vinput, T.hyperplane) \le r$}
+      \State \Return $\algtitle{SearchClosePoints}(T.left,\vinput,r) \cup \algtitle{SearchClosePoints}(T.right,\vinput, r)$
+    \ElsIf {$T.hyperplane(\vinput) > 0$}
+      \State \Return $\algtitle{SearchClosePoints}(T.right,\vinput,r)$
+    \Else
+      \State \Return $\algtitle{SearchClosePoints}(T.left,\vinput,r)$
+    \EndIf
+	\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Partition of a Point}
+\label{subsub:point-partition}
+
+We can determine the partition a point $\vinput$ belongs to by slightly modifying the \algtitle{SearchClosePoints} method, as shown in \autoref{alg:search-point-partition}. The differences with \autoref{alg:search-points-in-hypersphere} are as follows: (1) when a leaf node is reached, the entire dataset associated with that leaf is returned; and (2) when the point lies on the splitting hyperplane, the returned samples are those belonging to the partitions sharing that hyperplane as a boundary. Otherwise, \autoref{alg:search-point-partition} traverses the BSP tree in the same manner as \autoref{alg:search-points-in-hypersphere}.
+
+\begin{algorithm}[t]
+	\caption[$\algtitle{SearchPartition}$ algorithm]{$\algtitle{SearchPartition}$ algorithm}
+	\label{alg:search-point-partition}
+	\begin{algorithmic}[1]
+    \Require{$T$: A BSP tree, $\vinput$: Center of the hypersphere, $r$: Radius of the hypersphre}
+    \Ensure{Set of point inside the hypersphere}
+
+    \If {$T$ is a $\textsc{Leaf}$}
+      \State \Return $T.dataset$
+    \EndIf
+
+    \If {$T.hyperplane(\vinput) = 0$}
+      \State \Return $\algtitle{SearchPartition}(T.left,\vinput,r) \cup \algtitle{SearchPartition}(T.right,\vinput, r)$
+    \ElsIf {$T.hyperplane(\vinput) > 0$}
+      \State \Return $\algtitle{SearchPartition}(T.right,\vinput,r)$
+    \Else
+      \State \Return $\algtitle{SearchPartition}(T.left,\vinput,r)$
+    \EndIf
+	\end{algorithmic}
+\end{algorithm}
+
+\section{Certifier Optimizations}
+\label{subsec:certifier-optimizations}
+As highlighted at the beginning of the chapter, \autoref{alg:certifier-full}, exhibits computational inefficiency due to its exhaustive enumeration of all adversarially valid paths within the input's \acs{APP-G} before determining the set of labels assigned to points within the adversarial region. This two-stage process leads to significant redundancy, as the algorithm spends considerable effort exploring paths that ultimately yield the same set of labels already encountered along other paths. Recall that a label $l \in \mathcal{L}$ is in included in the output of \autoref{alg:certifier-full} if at least one adversarially valid path with $k$ samples and having $l$ among its most common labels is found. Therefore, a more efficient approach would be to find such a path, for each possible label $l \in \mathcal{L}$, and terminate further exploration for paths with the same most frequent label $l$ once such a path is found. This targeted approach avoids redundant computation and significantly reduces the certifier's execution time. Moreover, if a label $l$ is dominant in some adversarially valid path $\vpath = [\sample[1], \sample[2],\ldots,\sample[m]]$ then it will remain so regardless of the order of samples in $\vpath$. Additionally, observe that the validity polytope of each permutation of samples in $\vpath$ is entirely contained in the high order voronoi cell \cite{voronoi-tessellation, high-order-voronoi} whose sites are exactly the samples $\{\sample[1], \sample[2],\ldots,\sample[m]\}$ (i.e., the region of space containing points closer to the $m$ samples in $\vpath$ than any other sample in the training set). Therefore, given a set $S$ of samples we can check the existence of an adversarially valid path composed of samples in $S$ by verifying whether the high order voronoi cell, whose site are samples in $S$, intersects with the perturbation region. If there is an intersection than it means that there surely exist an adversarially valid path composed of sample in $S$. Conversely, if they do not intersect, then no such path exists. So using voronoi cell we can explore just one single path instead of all the permutations of $S$ further reducing the certification time. Additionally, since \acs{$k$-NN} is stable for an input $\vinput$ only when every point in $\pert$ is classified with the same label, we can terminate the certification process once we found two different labels assigned by \acs{$k$-NN} to samples in $\pert$. Other optimizations that can accelerate the certification process are:
+
+\begin{enumerate}[wide, labelwidth=!, labelindent=0pt]
+  \item[\textbf{Opt. 1)}] If the samples in the neighborhood of the adversarial region share same label $l$ then there is no need to explore the \acs{APP-G} of the input, and we can safely return a singleton with label $l$;
+  \item[\textbf{Opt. 2)}] Suppose that in an adversarially path $\vpath$ having $m < k$ samples, the two most common labels $l_1$ and $l_2$ occur $t_1$ and $t_2$ times respectively with $t_1 \ge t_2$. Then if $t_1 - t_2 \ge k - m$ it means that $l_1$ will be among the dominant labels regardless of the last $k - m$ samples of the path. So in this case there is no need to further extend the path and label $l_1$ can be safely added to the output labels;
+  \item[\textbf{Opt. 3)}] One special case of \textbf{Opt. 1)} is when the first $\ceil*{\frac{k}{2}}$ samples of the path have the same label $l$. Again extending the path further will not change the dominant label and so $l$ can be safely added to the output labels;
+\end{enumerate}
+
+Following these observations, the certifier algorithm, detailed in \autoref{alg:opt-certifier}, optimizes the robustness certification process. Given the BSP tree $\var{Tree}$ of the dataset, the input sample $\vinput$, the perturbation magnitude $\epsilon$, and the number $k$ of neighbors to search, the algorithm begins by identifying the training samples $\set$ within the perturbed region's neighborhood (lines $1$-$2$). If all samples in $\set$ share the same label $l$, the algorithm immediately returns the set $l$ (lines $3$-$4$). Otherwise, it constructs the \acs{APP-G} for $\vinput$ (line $5$). The algorithm then examines each unique label $l$ found within $\set$. For each label $l$, it checks if multiple labels have already been identified; if so, those labels are returned, and certification process terminates. Otherwise, the samples in $\set$ are separated into two distinct sets: $\set_L$, containing samples labeled with $l$, and $\set_O$, containing samples with alternative labels (line $10$-$11$). To evaluate the dominance of label $l$, the algorithm checks the existence of a potential path with $k$ samples within $\APPG$ where $l$ remains the predominant label. If such path does not exist, the algorithm concludes that label $l$ cannot be assigned to points within the perturbation region and therefore excludes it from consideration and continue with next label (line $12$-$14$). Conversely, the algorithm iteratively constructs sample sets of cardinality $n$ between $\ceil*{k/2}$ and $k$, ensuring $l$ is among the most frequent labels within each set (lines $15$-$28$). These sets represent potential paths within $\APPG$. For a given set size $n$, the algorithm computes the minimum and maximum possible occurrences of samples labeled $l$ within any path of length $n$ (lines $16$-$18$). Subsequently, for each possible number of occurrences $\var{n\_occur}$, it identifies the set $\var{PS}_L \subseteq \set_L$ containing samples that can be included in a path of length $n$ with the required $\var{n\_occur}$ occurrences of label $l$ (line 20). Then, for each subset $\var{VC}_L \subseteq \var{PS}_L$ of size $\var{n\_occur}$, the algorithm attempts to expand it with samples labeled differently to reach the required length $n$. To do this it constructs the set $\var{PS}_O \subseteq \set_O$ containing samples that can extend the set $\var{vertices}$, which contains samples in $\var{VC}_L$ and their predecessors, without exceeding the required length $n$ (lines $22$-$23$). Afterward, the algorithm iteratively adds to $\var{vertices}$ each possible subset $\var{VC}_O \subseteq \var{PS}_O$ of cardinality $n - |\var{vertices}|$ (lines $24$-$25$) and checks whether the Voronoi cell whose sites are the samples in the resulting set intersects with the perturbation (line $26$). If there is an intersection, it indicates an adversarial path composed of samples within that extended set. The algorithm then checks whether \textbf{Opt. 2)} or \textbf{Opt. 3)} applies to the samples in the extended set (line $26$). If so, the label $l$ is added to the classification, and the algorithm proceeds to the next label (lines $27$-$28$).
+Finally, after wall the labels are processed returns the identified labels (line $29$).
+
+In essence, for each unique label $l$ in the \acs{APP-G} of the input sample, \autoref{alg:opt-certifier} iteratively constructs sets of samples of cardinality $n$ ($\ceil*{k/2} \leq n \leq k$). To achieve this it first builds sets up to size $n$ comprised of samples labeled with $l$ and their predecessors, and then extends these sets with all possible samples labeled differently, while ensuring label $l$ remains the dominant label. Then, it verifies whether an adversarial valid path exists in $\APPG$ of the input by checking for an intersection between the adversarial region and Voronoi cells whose sites are the samples in the constructed sets, and if either optimization \textbf{Opt. 2)} or \textbf{Opt. 3)} can be applied. If both conditions are met, label $l$ is added to the classification.
+
+\begin{algorithm}
+	\caption[$\algtitle{OptCertifier}$ algorithm]{$\algtitle{OptCertifier}$ algorithm}
+	\label{alg:opt-certifier}
+	\begin{algorithmic}[1]
+    \Require{$\var{Tree}$: BSP tree of the dataset, $\vinput$: The input sample\\
+    $\epsilon$: The perturbation magnitude, $k$: The number neighbors}
+    \Ensure{Set of possible labels that point in $\pert$ can be classified with}
+
+    \State $\set \gets \var{Tree}.\textsc{GetSamples}(\vinput)$
+    \State $\var{labels} \gets$ distinct labels among samples in $\set$
+    \If {$|\var{labels}|$ = 1}
+      \State \Return $\var{labels}$
+    \EndIf
+
+    \State $\APPG \gets \algtitle{CreateAPPGraph}(\set, \vinput, \epsilon)$
+    \State $\var{classification} \gets \emptyset$
+
+    \ForAll {$\var{label} \textbf{ in } \var{labels}$}
+
+
+      \If {$|\var{classification}| > 1$}
+        \State \Return $\var{classification}$
+      \EndIf
+
+      \State $\set_L \gets \{\sample \in \set | \sample.\textsc{Label} = \var{label}\}$
+      \State $\set_O \gets \{\sample \in \set | \sample.\textsc{Label} \neq \var{label}\}$
+
+      \If {\textbf{not } $\algtitle{ExistsPath}(\var{label}, \set_L \cup \set_O, k)$}
+        \State \textbf{go to next label}
+      \EndIf
+
+      \ForAll {$n \textbf{ in } [\ceil*{k/2}, \ldots, k]$}
+
+        \State $\var{max\_label\_occur} \gets \algtitle{ApproxMaxOccurences}(\var{label}, \set_L, n)$
+        \State $\var{max\_label\_occur} \gets min(n, \var{max\_label\_occur})$
+        \State $\var{min\_label\_occur} \gets \ceil*{\dfrac{n}{|\var{labels}|}}$
+
+        \ForAll {$\var{n\_occur} \textbf{ in } [\var{max\_label\_occur},\ldots, \var{min\_label\_occur}]$}
+
+          \State $\var{PS}_L \gets \algtitle{FindValidSamples}(\emptyset, \set_L, n\_occur, n)$
+          \ForAll {$\var{VC}_L \textbf{ in } \algtitle{Combinations}(\var{PS}_L, \var{n\_occur})$}
+
+            \State $\var{vertices} \gets $ samples in $\var{VC}_L $ and their predecessors
+
+             \State $\var{PS}_O \gets \algtitle{FindValidSamples}(\var{vertices}, \set_O, n\_occur, n)$
+
+             \ForAll {$\var{VC}_O \textbf{ in } \algtitle{Combinations}(\var{PS}_O,n - n\_occur)$}
+
+                \State $\var{all\_vertices} \gets $ samples in $\var{VC}_L \cup \var{VC}_O$ and their predecessors
+                \If {$\algtitle{ExistsValidPath}(\var{all\_vertices}, \APPG)$ and \newline
+                    \hspace*{0.5em}\textbf{Opt. 2)} or \textbf{Opt. 3)} applicable}
+                    \State$\var{classification} \gets \var{classification} \cup \{\var{label}\}$
+                    \State \textbf{go to next label}
+                  \EndIf
+              \EndFor
+          \EndFor
+        \EndFor
+      \EndFor
+    \EndFor
+    \State \Return $\var{classification}$
+	\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{\algtitle{ExistsPath} and \algtitle{ApproxMaxOccurences} Methods}
+
+One optimization used in \autoref{alg:opt-certifier} that allows us to  skip the exploration of the graph for a specific label $l$ is to check whether a path of length $k$ can exist in the \acs{APP-G} of the input. One way to efficiently compute this is to find the set $A$ of samples with size $n$ such that $l$ is a dominant label regardless of the existence of an adversarially valid path comprising samples in $A$. This is a combinatorial optimization problem that can be solved using Binary Integer Programming (BIP) \cite{milp}. As an optimization problem it can be formulated as follows: if there are $n$ samples in $\APPG$ and $x_i$ is a boolean variable that indicates whether sample $\sample[i]$ is included in $A$ then the problem is to maximize
+\[
+  \sum_{i=1}^{i=n} v_i \cdot x_i
+\]
+where $v_i$ is 2 if sample $\sample[i]$ is labeled with $l$ otherwise is 1, subject to the following constraints
+\begin{enumerate}
+  \item If sample $\sample$ is included $A$ then its predecessors must be included as well. This constraint can be formulated with
+  \[
+    \forall \sample[j] \in \pred{\sample}\quad x_i - x_j \le 0
+  \]
+  \item the number of samples nn $A$ with a label different from $l$ must not exceed the number of samples labeled with $l$. This can be formulated as
+  \[
+    \forall l_j \in Labels,\ l_j \neq l\quad \sum_{j \in I_j} x_j - \sum_{i \in I} x_i \le 0
+  \]
+  where $Labels$ is the set of unique labels in $\APPG$, $I_j$ and $I$ are the set indices of the samples with label $l_j$ and $l$ respectively.
+
+  \item The number of selected samples is exactly $k$. This constraint can be expressed as
+  \[
+    \sum_{i=1}^{i=n} x_i = k
+  \]
+\end{enumerate}
+
+If none of the variable corresponding to samples labeled with $l$ is set to 1 then it means that no path with length equal to $k$ exists where $l$ is a dominant label hence the maximum length is 0. Otherwise, such a path exists. This is exactly the problem solved by the $\algtitle{ExistsPath}$ to verify the existence of path with $k$ samples in which the label $l$ is dominant. Furthermore, this linear programming formulation also yields the maximum occurrences of label $l$ under a specific path length constraint within the \acs{APP-G}. Consequently, the $\algtitle{ApproxMaxOccurences}$ method employs the same linear problem to approximate the maximum occurrences of label $l$ in any path of a given length. However, because we do not explicitly check for the existence of an adversarially valid path, $\algtitle{ExistsPath}$ may incorrectly assert existence when, in actuality, it does not hold. This constitutes the primary source of inefficiency for the algorithm. Specifically, when $\algtitle{ExistsPath}$ returns true, but the desired path does not exist, the certifier wastes significant time searching for a path that will never be found, leading to significant increased runtime, especially when the desired length is large. Some solution to this problem are given in \autoref{chp:conclusion-future-works}.
+
+\subsubsection{\algtitle{FindValidSamples} Methods}
+
+This method is used by the optimized certifier to identify the samples to use in order to construct the sets of size $n$ in line $20$ and $23$. It takes as input a set $A$ to be extended, the set $S$ containing the samples that we choose from, the maximum number $o$ of occurrences for every label in the extended set and the size $n$ of the resulting set. For any $s \in S$ let $B(s) = A \cup \{s\} \cup \pred{s}$ then $\algtitle{FindValidSamples}$ returns the samples $s \in S$ such that
+
+\begin{itemize}
+  \item $|B(s)| \leq n$
+  \item The number of occurences of any label in $B(s)$ is not greater than $o$
+\end{itemize}

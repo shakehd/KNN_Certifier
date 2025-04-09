@@ -1,0 +1,28 @@
+\documentclass{Dissertate}
+
+\input{utils/commands}
+\input{utils/operators}
+
+\begin{document}
+
+    % the front matter
+    \input{frontmatter/personalize}
+    \frontmatter
+    \setstretch{\dnormalspacing}
+
+    % chapters
+    \include{chapters/introduction}
+    \include{chapters/background}
+    \include{chapters/related_works}
+    \include{chapters/methodology}
+    \include{chapters/optimization}
+    \include{chapters/evaluation}
+    \include{chapters/conclusion}
+
+    % references
+    \cleardoublepage
+    \phantomsection
+    \addcontentsline{toc}{chapter}{References}
+    \bibliography{references.bib}
+
+\end{document}

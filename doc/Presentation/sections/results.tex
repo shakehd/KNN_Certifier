@@ -1,0 +1,159 @@
+\section{Experimental Evaluation}
+
+\begin{frame}{Experimental Evaluation}
+    \begin{itemize}
+        \item Evaluated $k$-NN robustness  using 7 datasets;
+        \item Used $k \in \{1,3,5,7\}$;
+        \item Perturbation region with $\epsilon$ up to $0.05$;
+    \end{itemize}
+\end{frame}
+
+% \begin{frame}{Evaluation Metrics}
+%     Evaluated $k$-NN on the following metrics:
+%     \begin{itemize}
+%         \item \textbf{Robustness}: $k$-NN stable on $x$ and correct
+%             \[
+%                 \forall x_0 \in P^{\epsilon}(x)\quad k\text{-NN}(x_0)= \text{ ground truth of } x
+%             \]
+%         \item \textbf{Individual Fairness}: Similar individual should be treated similarly
+%             \[
+%                 \forall x, x_0 \in \mathbb{R}^n\quad \delta(x, x_0) \leq \epsilon \Rightarrow  k\text{-NN}(x)= k\text{-NN}(x_0)
+%             \]
+%     \end{itemize}
+% \end{frame}
+
+\begin{frame}[shrink=5]{Datasets}
+    \begin{table}[H]
+        \small
+        \begin{tabular}{|l|g|g|g|g|g|}
+            \hline
+            \rowcolor{white}
+            \textbf{Name} & \#training & \#test & \#features & \#features (one-hot) & \#classes \\
+            \hline\hline
+            \rowcolor{white}
+            Australian    &   483 &  207  &  14 &  39 &  2 \\
+            BreastCancer  &   479 &  204  &  10 &  10 &  2 \\
+            \rowcolor{white}
+            Diabetes      &   556 &  230  &   8 &   8 &  2 \\
+            Fourclass     &   604 &  258  &   2 &   2 &  2 \\
+            \rowcolor{white}
+            Letter        & 15000 & 5000  &  16 &  16 & 26 \\
+            Pendigits     &  7494 & 3498  &  16 &  16 & 10 \\
+            \rowcolor{white}
+            Satimage      &  4435 & 2000  &  36 &  36 &  6 \\
+            \hline
+        \end{tabular}
+    \end{table}
+\end{frame}
+
+\begin{frame}{Preprocessing}
+    \begin{itemize}
+        \item Rows and columns with missing values are dropped;
+        \item When needed, datasets are split into training ($\approx 70-80\%$) and test ($\approx 20-30\%$) sets;
+        \item Categorical features are one-hot encoded;
+        \item Numerical features are scaled to $[0,1]$ range.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile, shrink=5]{Robustness Results}
+    \begin{figure}[H]
+        \centering
+        \pgfplotstableread{
+            epsilon k1 k3 k5 k7
+            0.1 97.6 97.6 97.4 97.4
+            0.2 97.5 97.5 97.3 97.3
+            0.5 97.2 97.2 97.0 97.0
+            1 96.4 96.6 96.4 96.3
+            2 94.4 94.5 94.5 94.2
+            3 91.2 91.6 91.7 91.8
+            4 86.2 88.5 88.9 89.0
+        }\loadedtable
+        \pgfplotsset{grid style={dashed}}
+        \begin{tikzpicture}
+            \begin{axis}[
+                title = {\small \bfseries Pendigits},
+                xlabel = {\footnotesize Perturbation (\%)},
+                ylabel = {\footnotesize Certified Robustness (\%)},
+                xtick={0,1,2,3,4},
+                ytick={80,85,90,95,100},
+                width = 6cm,
+                height = 6cm,
+                grid = both,
+                major grid style = {lightgray},
+                legend style = {nodes={scale=0.7, transform shape}},
+                legend pos = north east,
+                legend entries = {$k = 1$, $k = 3$, $k = 5$, $k = 7$},
+                no markers,
+                every axis plot/.append style = {thick}
+                ]
+                \addplot table [x=epsilon,y=k1] {\loadedtable};
+                \addplot table [x=epsilon,y=k3] {\loadedtable};
+                \addplot table [x=epsilon,y=k5] {\loadedtable};
+                \addplot table [x=epsilon,y=k7] {\loadedtable};
+            \end{axis}
+        \end{tikzpicture}
+        \quad
+            \pgfplotstableread{
+            epsilon k1 k3 k5 k7
+            0.1 70.0 71.7 69.6 71.3
+            0.2 68.6 70.0 68.2 71.3
+            0.5 63.9 67.3 67.3 67.8
+            1 58.6 63.0 63.0 61.7
+            2 45.6 47.8 50.0 54.4
+            3 33.4 37.3 41.3 44.7
+            4 27.3 29.5 33.4 38.2
+        }\loadedtable
+        \pgfplotsset{grid style={dashed}}
+        \begin{tikzpicture}
+            \begin{axis}[
+                title = {\small \bfseries Diabetes},
+                xlabel = {\footnotesize Perturbation (\%)},
+                ylabel = {\footnotesize Certified Robustness (\%)},
+                xtick={0,1,2,3,4},
+                ytick={30,40,50,60,70},
+                width = 6cm,
+                height = 6cm,
+                grid = both,
+                major grid style = {lightgray},
+                legend style = {nodes={scale=0.7, transform shape}},
+                legend pos = north east,
+                legend entries = {$k = 1$, $k = 3$, $k = 5$, $k = 7$},
+                no markers,
+                every axis plot/.append style = {thick}
+                ]
+                \addplot table [x=epsilon,y=k1] {\loadedtable};
+                \addplot table [x=epsilon,y=k3] {\loadedtable};
+                \addplot table [x=epsilon,y=k5] {\loadedtable};
+                \addplot table [x=epsilon,y=k7] {\loadedtable};
+            \end{axis}
+            \end{tikzpicture}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Limitations}
+    \begin{itemize}
+        \item Not always able to scale over high value of $k$ or $\epsilon$;
+        \item Much time wasted on finding a path which does not exist;
+    \end{itemize}
+    \begin{table}[H]
+        \centering
+     \begin{tabular}{|l|g|g|g|}
+            \hline
+            \rowcolor{white}
+            \textbf{Name} & $\epsilon$& Avg.\ Time per $\epsilon$ (seconds) \\
+            \hline\hline
+            \rowcolor{white}
+            Australian   & [0.001, 0.05] & 2 \\
+            BreastCancer & [0.001, 0.05] & 2.75\\
+            \rowcolor{white}
+            Diabetes      & [0.001, 0.04] & 180  \\
+            Fourclass     & [0.001, 0.04] & 1.2 \\
+            \rowcolor{white}
+            Letter        & [0.001, 0.01] & 120 \\
+            Pendigits     & [0.001, 0.04] & 900 \\
+            \rowcolor{white}
+            Satimage      & [0.001, 0.01] & 120 \\
+            \hline
+        \end{tabular}
+    \end{table}
+\end{frame}

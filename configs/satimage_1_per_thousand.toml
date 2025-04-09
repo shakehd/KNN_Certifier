@@ -1,0 +1,12 @@
+[knn_params]
+k_values = [1, 2, 3, 5, 7]
+distance_metric = "euclidean"
+
+[dataset]
+format = "libsvm"
+training_set = "satimage.scale"
+test_set = "satimage.scale.t"
+
+[abstraction]
+epsilon = 0.001
+

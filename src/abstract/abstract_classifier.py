@@ -32,7 +32,8 @@ class AbstractClassifier:
 
   def get_classification(self: Self,
                          perturbation: Perturbation,
-                         k_vals: list[int]) -> dict[int, set[int]]:
+                         k_vals: list[int],
+                         all_labels: bool = True) -> dict[int, set[int]]:
 
     max_k = max(k_vals)
     classifications: defaultdict[int, set[int]] = defaultdict(set)
@@ -65,7 +66,7 @@ class AbstractClassifier:
       actual_points = np.array([v.point for v in dominance_graph.get_vertices()])
       actual_points = np.append(actual_points, [adv_region.lower_bound(), adv_region.upper_bound()], axis=0)
 
-      possible_classifications = dominance_graph.get_neighbors_label( k_vals)
+      possible_classifications = dominance_graph.get_neighbors_label( k_vals, all_labels)
 
       logger.info('\t\tlabels: ')
       for k in range(max_k+1):

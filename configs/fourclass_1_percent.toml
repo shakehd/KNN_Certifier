@@ -9,4 +9,3 @@ test_set = "fourclass.t"
 
 [abstraction]
 epsilon = 0.01
-

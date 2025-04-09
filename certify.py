@@ -11,7 +11,6 @@ import argparse
 import time
 from pebble import ProcessExpired, ProcessPool
 
-
 from src.abstract.abstract_classifier import AbstractClassifier
 from src.dataset.loader import DataLoader
 from src.logging.logger import ProcessLogger
@@ -30,8 +29,11 @@ def get_args_parser() -> argparse.ArgumentParser:
                       help='name of the config file to read (it must be inside the config folder !!).')
   parser.add_argument('--random-state', metavar='RANDOM', type=int,
                       help='random seed used when partitioning the dataset.')
+  parser.add_argument('--all-labels',
+                      help='Compute all labels. (default False)',
+                      action='store_true')
   parser.add_argument('--partition-size', metavar='PSIZE', type=int,
-                      default=20,
+                      default=100,
                       help='maximum number of data points in a partition (default 20).')
   parser.add_argument('--no-parallel', action='store_true',
                       help='Classify point sequentially.')
@@ -42,8 +44,9 @@ def get_args_parser() -> argparse.ArgumentParser:
 
   return parser
 
+
 def parallel_main(params: Configuration, level:str, partition_size: int = 20,
-                  random_state: Optional[int] = None) -> None:
+                  random_state: Optional[int] = None, all_labels: bool = True) -> None:
 
   global abstract_classifier
   k_values = params['knn_params']['k_values']
@@ -67,7 +70,7 @@ def parallel_main(params: Configuration, level:str, partition_size: int = 20,
   classified_points: int = 0
 
   timeout_tasks : list[int] = []
-  timeout: int = 2400
+  timeout: int = 6 * 60 * 60 # six hours
   with tqdm(total=tot_points,
              bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining} {rate_inv_fmt} {postfix}]',
              desc='Verifying') as pbar:
@@ -81,7 +84,7 @@ def parallel_main(params: Configuration, level:str, partition_size: int = 20,
       ) as pool:
 
       results: dict[Future[Result], int] =\
-          {pool.schedule(classify_point, args=(abstract_classifier, ix+1, point, label, params, dataset_props), timeout=timeout):ix
+          {pool.schedule(classify_point, args=(abstract_classifier, ix+1, point, label, params, dataset_props, all_labels), timeout=timeout):ix
               for ix, (point, label) in enumerate(points)}
 
       for result in as_completed(results):
@@ -123,7 +126,7 @@ def parallel_main(params: Configuration, level:str, partition_size: int = 20,
       while len(timeout_tasks) > 0:
 
         results: dict[Future[Result], int] =\
-            {pool.schedule(classify_point, args=(abstract_classifier, point_id+1, points[point_id][0], points[point_id][1], params, dataset_props), timeout=timeout):point_id
+            {pool.schedule(classify_point, args=(abstract_classifier, point_id+1, points[point_id][0], points[point_id][1], params, dataset_props, all_labels), timeout=timeout):point_id
                 for point_id in timeout_tasks}
 
         timeout_tasks = []
@@ -197,7 +200,7 @@ def parallel_main(params: Configuration, level:str, partition_size: int = 20,
     overall_result_writer.writerows(overall_results)
 
 def sequential_main(params: Configuration, partition_size: int = 20,
-         random_state: Optional[int] = None) -> None:
+         random_state: Optional[int] = None, all_labels: bool = True) -> None:
   global abstract_classifier
   k_values = params['knn_params']['k_values']
 
@@ -229,15 +232,12 @@ def sequential_main(params: Configuration, partition_size: int = 20,
 
   for (test_point, test_label) in progress_bar:\
 
-    if classified_points != 86:
-      classified_points += 1
-      continue
 
     logger.info("-- Classifying point %s %s with label %s --\n", classified_points + 1 , test_point, test_label)
 
     perturbation = Perturbation(test_point, epsilon, dataset_props)
 
-    labels = abstract_classifier.get_classification(perturbation, k_values)
+    labels = abstract_classifier.get_classification(perturbation, k_values, all_labels)
 
     classification_result: list[str]  = [str(classified_points+1), str(test_label)]
     robustness_result: list[str]      = [str(classified_points+1)]
@@ -349,7 +349,7 @@ if __name__ == "__main__":
         join(log_dir, 'logs.log'),
         args.log_level.upper())
       process_logger.start()
-      parallel_main(params, args.log_level.upper(), args.partition_size, args.random_state)
+      parallel_main(params, args.log_level.upper(), args.partition_size, args.random_state, args.all_labels)
 
       logger.info("Finished classifying !!")
 
@@ -360,7 +360,7 @@ if __name__ == "__main__":
       logging.basicConfig(filename=join(log_dir, 'logs.log'),
                         filemode="w", level=args.log_level.upper(), format="%(message)s")
 
-      sequential_main(params, args.partition_size, args.random_state)
+      sequential_main(params, args.partition_size, args.random_state, args.all_labels)
 
   except Exception:
     logger.exception('An error occurred: ')

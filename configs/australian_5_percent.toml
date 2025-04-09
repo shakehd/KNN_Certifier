@@ -1,0 +1,14 @@
+[knn_params]
+k_values = [1, 2, 3, 5, 7]
+distance_metric = "euclidean"
+
+[dataset]
+format = "libsvm"
+training_set = "australian"
+test_set = "australian.t"
+category_indexes = [0, 3, 4, 5, 7, 8, 10, 11]
+numerical_features = [0, 3, 4, 5, 7, 8, 10, 11]
+
+[abstraction]
+epsilon = 0.05
+

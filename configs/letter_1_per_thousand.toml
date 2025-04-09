@@ -1,0 +1,11 @@
+[knn_params]
+k_values = [1, 2, 3, 5, 7]
+
+[dataset]
+format = "libsvm"
+training_set = "letter.scale"
+test_set = "letter.scale.t"
+
+[abstraction]
+epsilon = 0.001
+

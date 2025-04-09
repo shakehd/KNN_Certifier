@@ -1,0 +1,14 @@
+[knn_params]
+k_values = [1, 2, 3, 5, 7]
+distance_metric = "euclidean"
+
+[dataset]
+format = "csv"
+training_set = "compas.csv"
+test_set = "compas.t.csv"
+category_indexes = [1, 2, 7, 8]
+perturb_categories = [2]
+
+[abstraction]
+epsilon = 0.02
+

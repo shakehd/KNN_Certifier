@@ -1,0 +1,1030 @@
+%!TEX root = ../dissertation.tex
+
+\chapter{Methodology}
+\label{chp:methodology}
+
+As discussed in \autoref{chp:related-works}, one limitation of the method proposed in \cite{Nicolo-knn} is that it is sound but not complete. This incompleteness arises in part from the computation of distances between training samples and the perturbation region in the abstract domain, which is not always exact. This in turn hinders precise inference of the possible nearest neighbors of each sample within the perturbation region.
+
+To address this distance-related issue, our methodology modifies the standard \acs{$k$-NN} algorithm. Instead of sorting samples by their distance to the input sample and then classify the input with the most frequent label among the first $k$ samples, we first construct a graph where nodes represent training samples and edges model the \emph{closer-to-input} relation (i.e., an edge from $s_1$ to $s_2$ indicates that $s_1$ is closer to the input than $s_2$ with respect to Euclidean distance). We then classify the input with the most frequent labels within samples that constitute specific paths in the graph having length $k-1$, and satisfying relative proximity constraints. To determine the \emph{closer-to-input} relationship between two samples $s_1$ and $s_2$, we can simply check on which side of the perpendicular bisector between them, the input sample is located. In this way we can select the $k$ nearest neighbors without explicitly computing the distances between the input and training samples. We termed this new algorithm G-$k$NN that stands for Graph-\acs{$k$-NN} emphasizing the fact that it utilizes a graph structure. A similar approach is used to certify the robustness of \acs{$k$-NN} to an adversarial region of an input sample. We construct a graph whose nodes again are the samples of the training set but the edges model the \emph{closer-to-region} relation (i.e., an edge from $s_1$ to $s_2$ indicates that there exists a point in the adversarial region such that $s_1$ is closer to it than $s_2$) and then, for each label $l$, search for a path in the graph: (1) having length $k-1$, (2) $l$ being the most frequent label among the samples comprising the path and (3) satisfying some validity constraints. If such path is found then the corresponding label is added to the output set otherwise is ignored. To the best of our knowledge this is a novel approach which has not been explored previously.
+
+\medskip
+
+\noindent This chapter illustrates the details of this novel approach by first explaining the new \acs{$k$-NN} algorithm and then how the robustness to an adversarial region is inferred.
+
+\section {\texorpdfstring{G-$k$NN Algorithm}{G-kNN Algorithm}}
+\label{sec:G-kNN-algorithm}
+
+The main difference with the standard \acs{$k$-NN} algorithm is the way in which the $k$ nearest neighbors are selected. The standard \acs{$k$-NN} algorithm select the nearest neighbors by using the distance to the input sample. In contrast, \acs{G-$k$NN} utilizes the relation of being closer to the input between pair of samples w.r.t. the Euclidean distance. This relation is defined as follows
+
+\begin{definition}[closer-to-input relation $\preceq_{\vinput}$]
+\label{def:closer-to-input}
+  Given the points $\vinput, \sample[1], \sample[2] \in \mathbb{R}^n $
+  \[
+    \pre{\sample[1]}{\sample[2]} \Longleftrightarrow
+    \norm{\vinput - \sample[1]} \le \norm{\vinput - \sample[2]}
+  \]
+  % where $\norm{\cdot}$ is Euclidean norm.
+\end{definition}
+
+\noindent To determine if $\pre{\sample[1]}{\sample[2]}$ holds we can check if the input sample $\vinput$ and $\sample[1]$ reside in the same half space induces by the perpendicular bisector of $\sample[1]$ and $\sample[2]$ as shown in  \autoref{fig:illustrative-example}.
+
+\begin{figure}[h]
+	\centering
+	\begin{tikzpicture}[>=latex, fancy label/.style={fill=white,rounded corners=1pt,blur
+    shadow}]
+     \begin{axis}[
+			xmin = 0, xmax = 8,
+			ymin = 0, ymax = 8,
+			xtick distance = 1,
+			ytick distance = 1,
+			grid = both,
+			minor tick num = 5,
+			major grid style = {lightgray},
+			minor grid style = {lightgray!25},
+			width = 8cm,
+			height = 8cm,
+			axis x line=center,
+			axis y line=center,
+			xlabel = {$x$},
+			ylabel = {$y$},
+			xlabel style={above left},
+			ylabel style={below right}]
+
+        \path[name path=lower_bound] (axis cs:0,0) -- (axis cs:8,0);
+        \path[name path=upper_bound] (axis cs:0,8) -- (axis cs:8,8);
+
+        % draws point
+        \node [blue](s_1) at (2,2) {$\bullet$};
+        \node [below right = -0.32cm and -0.32cm of s_1]{ $\sample[1]$};
+        \node [blue](s_2) at (3,5) {$\bullet$};
+        \node [below right = -0.32cm and -0.32cm of s_2]{$\sample[2]$};
+        \node [red](x) at (3,2.5) {$\bullet$};
+        \node [below right = -0.32cm and -0.32cm of x]{$\vinput$};
+
+        \node [fill=white,rounded corners,text width=2cm, drop shadow] at (6,4.5) {\scriptsize region of points closer to $\sample[2]$};
+
+        \node [fill=white,rounded corners,text width=2cm, drop shadow] at (5,1) {\scriptsize region of points closer to $\sample[1]$};
+
+        \addplot [name path=bisector,domain=0:8,samples=100,dashed] {-0.33*x + 4.325};
+
+        \addplot [thick,color=blue,fill=blue, fill opacity=0.1]
+          fill between[ of=bisector and lower_bound, soft clip={domain=0:8},];
+        \addplot [thick,color=blue,fill=green, fill opacity=0.1]
+          fill between[ of=bisector and upper_bound, soft clip={domain=0:8},];
+
+        \end{axis}
+	\end{tikzpicture}
+	\caption[Example showing how to determine if $\pre{\sample[1]}{\sample[2]}$.]{Example showing how to determine if $\pre{\sample[1]}{\sample[2]}$. Since the input sample is in the same half space where $\sample[1]$ is located it means that the relation $\pre{\sample[1]}{\sample[2]}$ holds. }
+	\label{fig:illustrative-example}
+\end{figure}
+
+The \acs{G-$k$NN} algorithm first builds a graph $\mathbb{G}$ in which nodes represents the samples in the training set and the edges model the relation $\pre{}{}$ (i.e., the tail is closer to the input than the head) and then classify the input sample with the most frequent labels within samples that constitute specific paths in the graph having length $k-1$ and satisfying some validity constraints that will be detailed in \autoref{subsec:selection-k-nearest-neighbor}. We termed the graph $\mathbb{G}$ \emph{proximity precedence} graph (\acs{PP-G}) of the sample $x$ emphasizing the fact that the precedence of the vertices in any path comes from their proximity to $x$.
+
+\subsection{Proximity Precedence Graph}
+\label{subsec:proximity-precedence-graph}
+
+\begin{definition}
+  \label{def:pp-g}
+  Given the training set $\mathcal{S} \subset \mathcal{Z}$ and an input sample $\vinput \in \mathbb{R}^n$, the proximity precedence graph $\mathbb{G}^{\set}_{\vinput} = (V, E)$ of $\vinput$ is the graphical representation of the totally ordered set $(\mathcal{S}_X, \pre{}{})$ which means that:
+\begin{itemize}
+  \item $V = \mathcal{S}_X$
+  \item $E = \{ (\x[i], \x[j]) \mid \pre{\x[i]}{\x[j]}\ \text{holds} \}$
+\end{itemize}
+\noindent For ease of notation, in the following of this document the superscript $\set$ will be dropped as a training set $\set$ is always assumed.
+\end{definition}
+
+\noindent The graph is represented using adjacent lists. Given a vertex $v$ of the graph:
+\begin{itemize}
+  \item $\adj{v} = \{v_i \in V \mid (v, v_i) \in E\}$ denotes the set of adjacent vertices of $v$;
+  \item $\pred{v} = \{v_i \in V \mid (v_i, v) \in E \wedge (v, v_i) \notin  E \}$ denotes the set of vertices $v_j$ such there is an edge from $v_i$ to $v$ but not the other way around which means
+  \[
+      \pre{v_i}{v}\ \wedge \npre{v}{v_i}
+  \]
+  The set $\pred{v}$ will be called the \emph{predecessors} of $v$.
+  \item $\samedist{v} = \{v_i \in V \mid (v_i, v) \in E \wedge (v, v_i) \in  E \}$ denotes the set of vertices $v_i$ such that there is a bidirectional edge between $v_i$ and $v$ which means
+  \[
+      \pre{v_i}{v}\ \wedge \pre{v}{v_i}
+  \]
+\end{itemize}
+
+\noindent Given this definition, $\pred{\sample}$ include all the samples strictly closer to the input $\vinput$ than $\sample$ and $\samedist{\sample}$ contains those that are exactly the same distance to the input as $\sample$.
+
+\autoref{alg:PP-G} shows how the proximity precedence graph is created. Given the dataset $S$ and the input sample $\vinput$, it first creates the proximity precedence graph $\mathbb{G}$ with only the vertices having no adjacent vertices (line $1$-$2$). Then for each order pair of vertices $(\x[i], \x[j])$ (line $3$-$7$) check if $\pre{\x[i]}{\x[j]}$ holds (line $4$) and if so add the $(\x[i], \x[j])$ to the set of edges (line $5$-$6$) and finally returns the constructed graph (line $8$).
+
+\begin{algorithm}[H]
+	\caption[$\algtitle{CreatePPGraph}$ method]{$\algtitle{CreatePPGraph}$ method}
+	\label{alg:PP-G}
+	\begin{algorithmic}[1]
+    \Require{$S$: A training set, $\vinput$: The input sample}
+    \Ensure{The proximity precedence graph of $\vinput$}
+
+    \State $V \gets S_X$
+    \State $E \gets \varnothing$
+		\ForAll {$(\x[i], \x[j]) \in \{(\x[i], \x[j]) \mid \x[i], \x[j] \in V, \x[i] \not\eq \x[j]\}$}
+
+      \If $\pre{\x[i]}{\x[j]}$
+        \State $E \gets E \cup \{(\x[i], \x[j])\}$
+      \EndIf
+    \EndFor
+		\State \Return $(V, E)$
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{example}
+  \label{exp:pp-g}
+  Consider a dataset $\mathcal{S} \subset \mathbb{R}^2$ and the input sample $\vinput \in \mathbb{R}^2$ as shown in \autoref{subfig:exp-dataset}. In this scenario the samples $\sample[1]$ and $\sample[2]$ are equidistant from $\vinput$ while $\sample[3]$ is the furthest one. So in the \acs{PP-G} of $\vinput$, as shown in \autoref{subfig:pp-G-fig}, $\sample[1]$ and $\sample[2]$ are adjacent of each other, and $\sample[3]$ has no adjacent vertices since it is the furthest.
+
+  \begin{figure}[h]
+    \centering
+    \begin{subfigure}{0.5\linewidth}
+      \begin{tikzpicture}[>=latex, scale=0.9]
+        \centering
+        \begin{axis}[
+         xmin = 0, xmax = 5,
+         ymin = 0, ymax = 5,
+         xtick distance = 1,
+         ytick distance = 1,
+         grid = both,
+         minor tick num = 5,
+         major grid style = {lightgray},
+         minor grid style = {lightgray!25},
+         width = 8cm,
+         height = 8cm,
+         axis x line=center,
+         axis y line=center,
+         xlabel = {$x$},
+         ylabel = {$y$},
+         xlabel style={above left},
+         ylabel style={below right}]
+
+           \path[name path=lower_bound] (axis cs:0,0) -- (axis cs:8,0);
+           \path[name path=upper_bound] (axis cs:0,8) -- (axis cs:8,8);
+
+           % draws point
+           \node [blue](x_1) at (1,1) {$\bullet$};
+           \node [below right = -0.32cm and -0.32cm of x_1]{$\sample[1]$};
+           \node [blue](x_2) at (3,1) {$\bullet$};
+           \node [below left = -0.32cm and -0.32cm of x_2]{$\sample[2]$};
+           \node [blue](x_3) at (3.5,1.5) {$\bullet$};
+           \node [below right = -0.32cm and -0.32cm of x_3]{$\sample[3]$};
+           \node [red](x) at (2,1) {$\bullet$};
+           \node [below right = -0.32cm and -0.32cm of x]{$\vinput$};
+
+           \end{axis}
+     \end{tikzpicture}
+     \caption{Graph showing the dataset $\mathcal{S}$ and input sample of \autoref{exp:pp-g}}
+     \label{subfig:exp-dataset}
+    \end{subfigure}
+    \begin{subfigure}{0.4\linewidth}
+      \centering
+      \begin{tikzpicture}[>=latex, scale=0.9, baseline={(2.5,2.5)}]
+
+        \tikzset{% This is the style settings for nodes
+        vertex/.style={circle,minimum size=1.5cm,fill=white,draw,
+                    general shadow={fill=gray!60,shadow xshift=1pt,shadow yshift=-1pt}}}
+
+
+        \node [vertex](s_1) at (1,8) {$\vec{s}_1$};
+        \node [vertex](s_2) at (5,8) {$\vec{s}_2$};
+        \node [vertex](s_3) at (3,5) {$\vec{s}_3$};
+
+        \draw [->,very thick] (s_1) to[bend right]  (s_2);
+        \draw [->,very thick] (s_2) -- (s_3);
+
+        \draw [very thick,dashed, ->] (s_2) to[bend right]  (s_1);
+        \draw [very thick,dashed, ->] (s_1) -- (s_3);
+
+      \end{tikzpicture}
+      \captionsetup{justification=centering}
+      \caption{PP-G of input sample of \autoref{exp:pp-g}}
+     \label{subfig:pp-G-fig}
+    \end{subfigure}
+
+    \caption[Example showing a \acs{PP-G}]{Example showing the \acs{PP-G} of the input sample of \autoref{exp:pp-g}}
+    \label{fig:pp-g-example}
+  \end{figure}
+\end{example}
+
+\subsection{Nearest Neighbors Selection}
+\label{subsec:selection-k-nearest-neighbor}
+
+After constructing the \acs{PP-G} $\mathbb{G}_{\vinput}$ of the input, the \acs{G-$k$NN} identifies the $k$ nearest neighboring samples to the input sample to predict its label. These neighbors will form a path of length $k-1$ within $\mathbb{G}_{\vinput}$ where, by definition of a proximity precedence graph, the first sample in this path is the closest one to the input, the second sample is the second closest one and so on. This means not all paths of length $k-1$ contains the $k$ nearest samples but only those that are coherent with the proximity relations defined among the samples within the dataset $\mathcal{S}$ that is if $\pre{\x[1]}{\x[2]}$ but $\npre{\x[2]}{\x[1]}$ then every path in which $\x[2]$ is present must also contain $\x[1]$ preceding $\x[2]$. For instance in the \acs{PP-G} of \autoref{exp:pp-g} the path $[\sample[2], \sample[3]]$ is not a valid path because $\pre{\sample[1]}{\sample[3]}$ but $\npre{\sample[3]}{\sample[1]}$, but the path does not contain the sample $\vec{s}_1$. This observation leads to the following definition for a valid path:
+
+\begin{definition}[Valid path]
+\label{def:valid-path}
+A path $\mathcal{P}$ within a \acs{PP-G} is defined to be \emph{valid} if and only if
+\[
+  \forall \x[i] \in \mathcal{P}.\ \forall \x[j] \in \pred{\x[i]}. \ \ \x[j] \text{ is a predecessor of } \x[i]
+\]
+\end{definition}
+
+So, by this definition, in the \acs{PP-G} of \autoref{exp:pp-g} only the edges with the same stroke form valid paths which are:$[\vec{s}_1]$, $[\vec{s}_2]$, $[\vec{s}_1, \vec{s}_2]$, $[\vec{s}_2, \vec{s}_1]$, $[\vec{s}_1, \vec{s}_2, \vec{s}_3]$ and $[\vec{s}_2, \vec{s}_1, \vec{s}_3]$
+
+\begin{proposition}
+  \label{prop:starting-sample}
+Every valid path in a \acs{PP-G} of $\vinput$ starts with samples $\x[0]$ closest to the input $\vinput$.
+\end{proposition}
+\begin{proof}
+By \autoref{def:valid-path} every predecessor of samples in valid path must precede them so the first sample $\x[0]$ is such that $\pred{\x[0]} = \emptyset$ which happens only for the closest samples to the input sample $\vinput$.
+\end{proof}
+
+\begin{proposition}
+\label{prop:safe-condition}
+  Let $\sample[i] \in \set$ be a sample of the training set such that: (1) it does not occur in a valid path $\mathcal{P} = [\sample[0], \sample[1],\ldots, \sample[i-1]]$, (2) every sample in $\pred{\x[i]}$ is present in $\mathcal{P}$ and (3) is an adjacent of $\sample[i-1]$. Then the path $\mathcal{P}^\prime = \mathcal{P} + [\sample[i]]=[\sample[0], \sample[1],\ldots, \sample[i-1], \sample[i]]$ is a valid path.
+\end{proposition}
+\begin{proof}
+By hypothesis, every predecessor of $\sample[i]$ is present in $\mathcal{P}$ which is already a valid path and so the path $\mathcal{P}^\prime$ satisfy the condition to be a valid path.
+\end{proof}
+
+\begin{definition}[Safe sample]
+\label{def:safe-sample}
+Given a valid path $\mathcal{P} = [\sample[0], \sample[1],\ldots, \sample[i-1]]$, the sample $\sample[i]$ is defined to be \emph{safe} for $\mathcal{P}$ if the path $\mathcal{P} + [\sample[i]] = [\sample[0], \sample[1],\ldots, \sample[i-1], \sample[i]]$ is a valid path.
+\end{definition}
+
+\noindent By \autoref{prop:safe-condition}, a sample is safe for a valid path if all its predecessors are present in the path.
+
+\begin{proposition}
+\label{prop:valid-k-samples}
+Given $k \in \N, k \ge 1$, an input sample $\vinput \in \R$ and the \acs{PP-G} $\mathbb{G}_{\vinput}$ of $\vinput$, a valid path $\vpath$ of length $k-1$ contains the closest $k$ samples to the input $\vinput$.
+\end{proposition}
+\begin{proof}
+We prove the proposition by induction on the length $k-1$ of the path:
+\begin{itemize}
+  \item \textbf{Base Case} ($k = 1$): In this case $\vpath$ is made of only one sample which, by \autoref{prop:starting-sample}, is the closest sample to the input $\vinput$.
+  \item \textbf{Inductive Case} $(k = h+1, h \ge 1)$: The path $\vpath$ can be expressed as the concatenation of a valid sub-path $\vpath[P^\prime]$ and the single sample $\sample[h]$ (i.e., $\vpath$ = $\vpath[P^\prime] + [\sample[h]]$). By the induction hypothesis, the $\vpath[P^\prime]$ contains the $h$ samples closest to the input $\vinput$. Because $\vpath$ is valid, $\sample[h]$ is a safe sample for $\vpath[P^\prime]$ (by Definition \autoref{def:safe-sample}). This implies that all samples closer to $\vinput$ than $\sample[h]$ are already included in $\vpath[P^\prime]$. Furthermore, according to the definition of the proximity precedence graph, any sample $\sample[j]$ in $\vpath[P^\prime]$ that is not a predecessor of $\sample[h]$ must be equidistant from the input $\vinput$ as $\sample[h]$ (i.e., $\sample[j] \in \samedist{\sample[h]}$). Therefore, $\vpath[P^\prime]$ contains all the samples that are either closer to or equidistant from $\vinput$ compared to $\sample[h]$, and hence the combined path $\vpath[P^\prime] + [\sample[h]]$ contains the $h+1$ samples closest to the input $\vinput$.
+\end{itemize}
+\end{proof}
+
+The generation of valid paths of length $k-1$ is done by traversing the graph using a Breadth-First Search (BFS) approach, while adhering to path validity constraints. \autoref{alg:extract-valid-paths} details the extraction of valid paths composed of $n$ samples from a given \acs{PP-G} $\mathbb{G}_{\vinput}$ of the input sample. The algorithm employs a FIFO queue (the variable $\var{queue}$) to maintain the list of all valid paths containing $k \leq n$ samples. It starts by initializing the queue with the samples $\sample$ such that $\pred{\sample} = \emptyset$ (lines $1$) effectively starting the traversal from samples closest to the input $\vinput$. A counter $\var{k}$ which denotes the number of samples within the paths in the queue is initialized to 1 (line $2$). The algorithm then iterates as long as the queue is not empty (line $3$-$17$). In each iteration, it dequeues all existing paths and checks if they contain the desired number of samples (i.e. the input $n$). If so, these paths are returned (lines $5$-$7$). Otherwise, each dequeued path is extended by appending every safe adjacent vertex of the path's last sample. These extended paths are then enqueued for the next iteration (lines $8$-$15$). Before the next iteration, the counter $\var{k}$ is incremented to reflect the increased number of samples in the paths within the queue (line 16)
+\begin{algorithm}[H]
+	\caption[$\algtitle{ExtractValidPath}$ method]{$\algtitle{ExtractValidPath}$ method}
+	\label{alg:extract-valid-paths}
+	\begin{algorithmic}[1]
+    \Require{$\mathbb{G}_{\vinput}$: \acs{PP-G} of the input sample\\
+             $n$: number of samples in the valid path}
+    \Ensure{Set of all valid paths comprised of $n$ samples}
+
+    \State $\var{queue} \gets \{[\sample] \mid \sample \in \mathbb{G}_{\vinput}
+    \wedge \pred{\sample} = \emptyset\}$
+    \State $\var{k} \gets 1$
+
+    \While {$\var{queue} \textbf{ not empty}$}
+      \State $\var{current\_paths} \gets \var{queue}.\textsc{PopAll()}$
+      \If {$\var{k} = n$}
+          \State \Return $\var{current\_paths}$
+      \EndIf
+
+      \ForAll {$\var{path} \textbf{ in } \var{current\_paths}$}
+        \State $\var{last\_sample} \gets \var{path.last()}$
+        \ForAll {$\var{sample} \textbf{ in } \adj{\var{last\_sample}}$}
+          \If {$\var{sample} \textbf{ is safe for } \var{path}$}
+            \State $\var{queue}.\textsc{append}(\var{path} + [\var{sample}])$
+          \EndIf
+        \EndFor
+      \EndFor
+      \State $\var{k} \gets \var{k} + 1$
+      \EndWhile
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{proposition}
+\label{prop:extract-all-valid-path}
+Given as input the \acs{PP-G} $\PPG$ and $n \in \N$, \autoref{alg:extract-valid-paths} returns all the valid paths within $\PPG$ containing $n$ samples.
+\end{proposition}
+\begin{proof}
+The proposition can be proved by showing, that at the $k$-th iteration of the while loop, at line 5 (i.e., before the check on the number of sample in the paths extracted from the queue), the queue contains all the valid path of comprised of $k$ samples. We proceed by induction on $k$:
+\begin{itemize}
+  \item \textbf{Base Case} ($k = 1$): In the first iteration, the queue contains all paths consisting of a single sample $\sample$ such that$\pred{\sample} = \emptyset$. These paths are valid by definition and have length 1.
+  \item \textbf{Inductive Case} $(k = h+1, h \ge 1)$: At iteration $h+1$, the paths inside the queue at line 5 are obtained by extending all the paths in the queue in the $h$-th iteration with every safe vertex among the adjacent of the path's last sample. By induction hypothesis the queue in the $h$-th iteration contains all the valid paths containing $h$ samples and so in the $h+1$ iteration, by definition of safe vertex, the queue contains all the valid paths with $h+1$ samples.
+\end{itemize}
+\end{proof}
+
+\subsection{The Full Algorithm}
+\label{subsec:gknn-full}
+
+\autoref{alg:gknn-full} illustrates the full algorithm of \acs{G-$k$NN}. Given a set of samples $\set$ and the input sample $\vinput$ the algorithm first build the \acs{PP-G} $\PPG$ of the input $\vinput$ (line $1$). Then the extract all the valid path within $\PPG$ with $k$ samples using the $\mathtt{extract\_valid\_path}$ method (line $2$). Afterward, the set containing the most frequent labels within the samples composing each extracted path is constructed and returned as the possible classifications of the input sample (line $3$-$8$).
+
+Since there could be multiple valid paths in the graph due to samples in $\set $ equidistant to the input $\vinput$, the latter could be classified with different labels hence the need to return a set of labels rather than a single one.
+
+\begin{algorithm}[H]
+	\caption[G-$k$NN full algorithm]{G-$k$NN full algorithm}
+	\label{alg:gknn-full}
+	\begin{algorithmic}[1]
+    \Require{$\set$: the training dataset, $\vinput$: the input sample\\
+             $k$: number of neighbors}
+    \Ensure{Set of all the possible classification of $\vinput$}
+
+    \State $\PPG \gets \algtitle{CreatePPGraph}(\set, \vinput)$
+    \State $\var{valid\_paths} \gets \algtitle{ExtractValidPath}(\PPG, $k$)$
+    \State $\var{classification} \gets \emptyset$
+    \ForAll {$\var{path} \textbf{ in } \var{valid\_paths}$}
+      \State $\var{labels} \gets $ most frequent labels in $\var{path}$
+      \State $\var{classification} \gets \var{classification} \cup \var{labels}$
+    \EndFor
+    \State \Return $\var{classification}$
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{theorem}
+Given the training dataset $\set$ and the input sample $\vinput$, \autoref{alg:gknn-full} returns all the possible classifications of the input $\vinput$.
+\end{theorem}
+\begin{proof}
+G-$k$NN classifies an input $\vinput$ by selecting the most frequent labels among the valid paths returned by $\algtitle{ExtractValidPath}$ method. Because this method provably returns all $k$ nearest neighbors of $\vinput$ (as shown in \autoref{prop:valid-k-samples} and \autoref{prop:extract-all-valid-path}), G-$k$NN is guaranteed to consider all possible classifications for $\vinput$.
+\end{proof}
+
+\begin{example}
+  Consider the scenario of \autoref{exp:pp-g}. Running the \autoref{alg:gknn-full} with $k=3$ the input is classified with the label $1$ since in all valid paths having $3$ samples (i.e., $[\vec{s}_1, \vec{s}_2, \vec{s}_3]$ and $[\vec{s}_2, \vec{s}_1, \vec{s}_3]$) the most frequent label is exactly $1$. In contrast, if $k=2$ then \autoref{alg:gknn-full} will return the set of labels $\{1, -1\}$ because the valid paths having $2$ samples (i.e., $[\vec{s}_1, \vec{s}_2]$ and $[\vec{s}_2, \vec{s}_1]$) contains both labels and so there is a tie.
+\end{example}
+
+\section{Exact Robustness Certification}
+\label{sec:exact-certifier}
+
+The previous section described our modifications the standard $k$NN in order to select the $k$ nearest neighbors without relying on the Euclidean distance between the training samples and the input samples. As we will see in this section these modifications will be crucial for certifying the robustness (or vulnerability) of \acs{G-$k$NN} algorithm, and consequently of the standard \acs{$k$-NN}, to an adversarial region of the input sample. An adversarial region is defined as follows
+
+\begin{definition}
+\label{def:adv-region}
+Given $\vinput \in \R$ and $\epsilon \in \N, \epsilon \ge 0$, the adversarial region of $\vinput$, denoted with $\pert$, is defined as the $\ell_{\infty}$-ball centered in $\vinput$ and radius $\epsilon$:
+\[
+  \pert = \{\sample \in \R \mid \parallel \vinput - \sample \parallel_\infty \le \epsilon\}
+\]
+where $\parallel \cdot \parallel_\infty$ is $\ell_\infty$ (or maximum) norm.
+\end{definition}
+
+Following \autoref{def:robustness}, given a training dataset $\set$ and an adversarial region $\pert$ of a test sample $\vinput$, to provably certify that the \acs{G-$k$NN} is robust to the region $\pert$ we need to verify whether the prediction of \acs{G-$k$NN} remains the same for all the samples within $\pert$ and coincides with the ground truth of $\vinput$. To verify this, the robustness certifier, given $\set$ and $\pert$, computes a set of labels $\mathcal{O}\subseteq  \mathcal{L}$ such that
+\[
+  \mathcal{O} = \bigcup_{\sample \in \pert} \text{G-}k\text{NN}(\set, \sample, k)
+\]
+that is $\mathcal{O}$ contains all and only the labels assigned by \acs{G-$k$NN} to samples within $\pert$. Then if $\mathcal{O}$ consists of a single label, then the \acs{G-$k$NN} is guaranteed to be stable. Moreover, if this label matches the ground truth of $\vinput$, the \acs{G-$k$NN} is considered robust to the adversarial region $\pert$. Computing the set $\mathcal{O}$ by applying \acs{G-$k$NN} on each sample within the adversarial region is obviously unfeasible since it contains an infinite number of samples. However, notice that the output of \acs{G-$k$NN} depends manly on the valid paths within the \acs{PP-G} of the input. So following this observation the set $\mathcal{O}$ can be computed as follows
+\begin{enumerate}
+  \item Create a graph $\APPG = (V, E)$ where $V = \set_{\vinput}$ and the set $E$ is such that $\APPG$ contains all the valid paths of any \acs{PP-G} $\PPG[\sample]$ of a sample  $\sample \in \pert$. We call the graph $\APPG$ \emph{adversarial proximity precedence} graph (\acs{APP-G});
+  \item Select every path in $\APPG$ which is a valid path in some \acs{PP-G} of a sample  $\sample \in \pert$;
+  \item Classify the perturbation with most frequent labels in each path selected in the previous step.
+\end{enumerate}
+With this procedure the set $\mathcal{O}$ can be computed since the number of paths within $\APPG$ is finite. The next subsections will describe each step of this procedure.
+
+\subsection{Adversarial Proximity Precedence Graph}
+\label{subsec:app-g}
+
+To understand how to construct the adversarial proximity precedence graph $\APPG$ suppose for example there are two samples $\sample[1], \sample[2] \in \set$ and points $\x[1], \x[2] \in \pert$ such that
+\begin{equation*}
+  \begin{cases*}
+    \sample[1] \preccurlyeq_{\x[1]} \sample[2] \wedge \sample[2] \not\preccurlyeq_{\x[1]} \sample[1] \\
+    \sample[2] \preccurlyeq_{\x[2]} \sample[1] \wedge \sample[1] \not\preccurlyeq_{\x[2]} \sample[2]
+  \end{cases*}
+\end{equation*}
+that is $\sample[1]$ is strictly closer to $\x[1]$ than $\sample[2]$ and  $\sample[2]$ is strictly closer to $\x[2]$ than $\sample[1]$. In this case paths in which $\sample[1]$ is a predecessor of $\sample[2]$ and those in which $\sample[2]$ is a predecessor of $\sample[1]$ are valid paths in the \acs{PP-G} of $\x[1]$ and $\x[2]$ respectively. Therefore, those paths must also be both valid paths in $\APPG$. This leads to the definition of the following relation between samples
+
+\begin{definition}[closer-to-region relation $\preccurlyeq^A_{(\vinput, \epsilon)}$]
+\label{def:closer-to-adv-region}
+Given $\vinput \in \R, \epsilon \in \N$ and $\sample[1], \sample[2] \in \set$
+\[
+  \sample[1] \preccurlyeq^A_{(\vinput, \epsilon)} \sample[2] \Longleftrightarrow \exists \sample \in \pert.\  \sample[1] \preccurlyeq_{\sample} \sample[2]
+\]
+In the following, for ease of the notation, the subscript $\epsilon$ will be dropped since it is constant.
+\end{definition}
+
+\noindent According to \autoref{def:closer-to-adv-region}, $\apre{\sample[1]}{\sample[2]}$ and $\apre{\sample[2]}{\sample[1]}$ therefore in $\APPG$ there should be an edge between $\sample[1]$ and $\sample[2]$ in both direction. If instead  $\apre{\sample[1]}{\sample[2]}$ but $\napre{\sample[2]}{\sample[1]}$ then it means the $\sample[1]$ is closer to every sample within $\pert$ than $\sample[2]$. As consequence the sample $\sample[1]$ is a predecessor of $\sample[2]$ in every \acs{PP-G} of a sample in $\pert$. Therefore, in $\APPG$ there should be only and edge from $\sample[1]$ to $\sample[2]$.
+
+To determine if the relation $\apre{}{}$ exists between two samples $\sample[1], \sample[2] \in \set$, one would need to verify for each point $\x \in \pert$ whether $\pre[\x]{\sample[1]}{\sample[2]}$ holds or not. However, this approach is impractical due to the infinite number of points in $\pert$. A more feasible method is to check whether the perpendicular bisector of $\sample[1]$ and $\sample[2]$ intersect with $\pert$ as show in 	\autoref{fig:closer-to-input-check} where the gray region is the adversarial region of the input sample.
+
+\begin{figure}[h]
+	\centering
+	\begin{tikzpicture}[>=latex, fancy label/.style={fill=white,rounded corners=1pt,blur
+    shadow}]
+     \begin{axis}[
+			xmin = 0, xmax = 8,
+			ymin = 0, ymax = 8,
+			xtick distance = 1,
+			ytick distance = 1,
+			grid = both,
+			minor tick num = 1,
+			major grid style = {lightgray},
+			minor grid style = {lightgray!25},
+			width = 8cm,
+			height = 8cm,
+			axis x line=center,
+			axis y line=center,
+			xlabel = {$x$},
+			ylabel = {$y$},
+			xlabel style={above left},
+			ylabel style={below right}]
+
+        \path[name path=lower_bound] (axis cs:0,0) -- (axis cs:8,0);
+        \path[name path=upper_bound] (axis cs:0,8) -- (axis cs:8,8);
+
+        % draws point
+        \node [blue](s_1) at (2,2) {\scriptsize $\bullet$};
+        \node [below right = -0.32cm and -0.32cm of s_1]{ $\vec{s_1}$};
+        \node [blue](s_2) at (3,5) {\scriptsize $\bullet$};
+        \node [below right = -0.32cm and -0.32cm of s_2]{$\vec{s_2}$};
+
+        \draw[fill=gray!50, draw=gray!70,semitransparent] (3.25,2.75) rectangle (3.75,3.25);
+        \node [red](x) at (3.5,3) {\scriptsize$\bullet$};
+        \node [below right = -0.32cm and -0.32cm of x]{\small $\vinput$};
+
+
+        \node [fill=white,rounded corners,text width=2cm, drop shadow] at (6,4.5) {\scriptsize region of points closer to $\vec{s}_2$};
+
+        \node [fill=white,rounded corners,text width=2cm, drop shadow] at (5,1) {\scriptsize region of points closer to $\vec{s}_1$};
+
+        \addplot [name path=bisector,domain=0:8,samples=100,dashed] {-0.33*x + 4.325};
+
+        \addplot [thick,color=blue,fill=blue, fill opacity=0.1]
+          fill between[ of=bisector and lower_bound, soft clip={domain=0:8},];
+        \addplot [thick,color=blue,fill=green, fill opacity=0.1]
+          fill between[ of=bisector and upper_bound, soft clip={domain=0:8},];
+
+        \end{axis}
+	\end{tikzpicture}
+	\caption[Example showing how to determine if $\apre{\vec{s}_1}{\vec{s}_2}$.]{Example showing how to determine if $a\pre{\vec{s}_1}{\vec{s}_2}$. Since the adversarial region intersect with the perpendicular bisector of $\sample[1]$ and $\sample[2]$ the relation $\apre{\vec{s}_1}{\vec{s}_2}$ holds. }
+	\label{fig:closer-to-input-check}
+\end{figure}
+
+To see how this can be done let first define some quantities that will be used later:
+
+\begin{definition}[pos\_neg function]
+Given $\x \in \R$ let $\textit{pos\_neg}: \R \rightarrow \{-1, 1\}$ be a function defined as
+\begin{equation*}
+  \textit{pos\_neg}(\x) =
+  \begin{cases*}
+    \ \,\, 1, \text{ if } \x \ge 0\\
+    -1, \text{ otherwise}
+  \end{cases*}
+\end{equation*}
+\end{definition}
+
+\begin{proposition}
+Given $\vec{n} \in \R, b \in \N$ let $\pi_{\vec{n}, b}$ be a hyperplane with normal vector $\vec{n}$ and $\pert$ an adversarial region of a point $\x[] \in \R$ as defined in \autoref{def:adv-region} then
+\[
+  \pi_{\vec{n}, b} \text{ intersect } \pert \Longleftrightarrow \x[] \in \pi_{\vec{n}, b} \vee \sign(\pi_{\vec{n}, b}(\x[])) \neq  \sign(\pi_{\vec{n}, b}(\x[]'))
+\]
+where $\x[]' = \x[] - \epsilon \cdot \sign(\pi_{\vec{n}, b}(\x[])) \cdot \textit{pos\_neg}^\star(\vec{n})$ and $\textit{pos\_neg}^\star$ is the component-wise \textit{pos\_neg} operation over vectors in $\R$. Essentially the hyperplane $\pi_{\vec{n}, b}$ intersects the adversarial region of $\x[]$ if and only if $\x[]$ and the point $\x[]'$, which is the vertex of the hypercube $\pert$ in the direction of $\pi_{\vec{n}, b}$
+from $\x[]$, are on the opposite side of $\pi_{\vec{n}, b}$.
+\end{proposition}
+
+\begin{proof}
+The proposition can be proved by demonstrating each direction of the implication separately:
+\begin{itemize}
+
+\item ($\Longrightarrow$): Suppose $\pi_{\vec{n}, b}$ intersect $\pert$ and $\x \in \pi_{\vec{n}, b}$. Since $\pi_{\vec{n}, b}$ intersect the adversarial region there surely exist a point $\x[]'' \in \pert$ such that $\x[]'' \in \pi_{\vec{n}, b}$. Because $\x[]'' \in \pert$ it can also be defined as
+\[
+  \x[]'' = \x[] - \sign(\pi_{\vec{n}, b}(\x[]))\cdot \bm{\varepsilon}'' \odot \textit{pos\_neg}^\star(\vec{n})
+\]
+where $\odot$ denotes the \textit{Hadamard} product and $\bm{\varepsilon}'' \in \R$ is such that $||\bm{\varepsilon}''||_\infty \le \epsilon$. The point $\x[]'$ on the other side of the hyperplane with respect to where $\x[]$ is located can be defined in terms of $\x[]''$ as follows
+
+\begin{align*}
+  \x[]' &= \x[]'' - \sign(\pi_{\vec{n}, b}(\x[]))\cdot \bm{\varepsilon}' \odot \textit{pos\_neg}^\star(\vec{n})\\
+    &=  \x[] - \sign(\pi_{\vec{n}, b}(\x[]))\cdot (\bm{\varepsilon}'' + \bm{\varepsilon}') \odot \textit{pos\_neg}^\star(\vec{n})
+\end{align*}
+for some $\bm{\varepsilon}' \in \R$ is such that $\forall i \in \{1,\ldots,n\}\ \ |\bm{\varepsilon}''_i + \bm{\varepsilon}'_i| = \epsilon$. With such value $\sign(\pi_{\vec{n}, b}(\x[]'))$ is as follows
+{\allowdisplaybreaks
+\begin{align}
+\sign(\pi_{\vec{n}, b}(\x[]'))
+&= \sign\left(\vec{n} \cdot \left[\x[] - \overbrace{\sign(\pi_{\vec{n}, b}(\x[]))}^{s} \cdot (\bm{\varepsilon}'' + \bm{\varepsilon}') \odot \overbrace{\textit{pos\_neg}^\star(\vec{n})}^{\vec{dir}}\right] + b\right)  \nonumber \\
+&= \sign\left(\vec{n} \cdot \left[\x[] - s \cdot \left(\bm{\varepsilon}''\odot \vec{dir} + \bm{\varepsilon}'\odot \vec{dir}\right)\right] + b\right)  \nonumber\\
+&= \sign\left(\vec{n} \cdot \left[\left(\x[] - s \cdot \bm{\varepsilon}''\odot \vec{dir}\right) + s \cdot \bm{\varepsilon}'\odot \vec{dir}\right] + b\right) \nonumber \\
+&= \sign\left(\vec{n} \cdot \left[\x[] - s \cdot \bm{\varepsilon}''\odot \vec{dir}\right] + b - s \cdot \vec{n} \cdot \bm{\varepsilon}'\odot \vec{dir}\right)  \nonumber \\
+&= \sign\left(\overbrace{\vec{n} \cdot \x[]'' + b}^{=0} - s \cdot \vec{n} \cdot \bm{\varepsilon}'\odot \vec{dir}\right) \nonumber\\
+&= \sign\left(- s \cdot \vec{n} \cdot \bm{\varepsilon}'\odot \vec{dir}\right)  \nonumber\\
+&= \sign\left(- \sign(\pi_{\vec{n}, b}(\x[])) \cdot \overbrace{\vec{n} \cdot \bm{\varepsilon}'\odot \textit{pos\_neg}^\star(\vec{n})}^{\text{positive}}\right)\label{eq:crucial}\\
+&= -\sign(\pi_{\vec{n}, b}(\x[])) \neq \sign(\pi_{\vec{n}, b}(\x[])) \nonumber
+\end{align}
+}
+In \autoref{eq:crucial} $\forall i \in {1,\ldotp,n}$ the sign of $\bm{\varepsilon}'_i \cdot \textit{pos\_neg}(\vec{n}_i)$  is the same as $\vec{n}_i$ and so the sign of $\vec{n}_i \cdot \bm{\varepsilon}'_i \cdot \textit{pos\_neg}(\vec{n}_i)$ is always positive hence $\vec{n} \cdot \bm{\varepsilon}' \cdot \textit{pos\_neg}\star(\vec{n})$ is positive value.
+
+In the case $\x[] \in \pi_{\vec{n}, b}$ then the implication holds vacuously.
+
+\item  ($\Longleftarrow$): if $\x[] \in \pi_{\vec{n}, b} \vee \sign(\pi_{\vec{n}, b}(\x[])) \neq  \sign(\pi_{\vec{n}, b}(\x[]'))$ then there exist two points in the adversarial region on opposite sides of the hyperplane. This implies that $\pi_{\vec{n}, b}$ definitely intersect $\pert$.
+\end{itemize}
+\end{proof}
+
+
+\begin{example}
+\label{exp:app-g}
+Consider a dataset $\mathcal{S} \subset \R[2]$ and the adversarial region $\pert$ of an input sample $\vinput \in \R[2]$ with magnitude $\epsilon = 0.25$ as shown in \autoref{subfig:exp-adv-dataset}. In this scenario the perpendicular bisector of samples $\sample[1]$ and $\sample[2]$ (i.e. the dashed line label with $\beta_{1,2}$) intersects with adversarial region $\pert$, and same holds for samples $\sample[1]$ and $\sample[3]$ as evidenced by perpendicular bisector labeled with $\beta_{1,3}$. Meanwhile, the sample $\sample[2]$ is closer to the every point within the adversarial region than $\sample[3]$ as show by the fact that their perpendicular bisector (i.e., the dashed line label with $\beta_{2,3}$) does not intersect with $\pert$. As a consequence in the \acs{APP-G} of $\vinput$, illustrated in \autoref{subfig:app-G-fig}, the samples $\sample[1]$ and $\sample[2]$ are adjacent of each other as well as $\sample[1]$ and $\sample[3]$. Meanwhile, between $\sample[2]$ and $\sample[3]$ there is only one edge going from $\sample[2]$ to $\sample[3]$.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.5\linewidth}
+    \begin{tikzpicture}[>=latex, scale=0.9]
+      \centering
+      \begin{axis}[
+        xmin = 0, xmax = 4,
+        ymin = 0, ymax = 4,
+        xtick distance = 1,
+        ytick distance = 1,
+        grid = both,
+        minor tick num = 5,
+        major grid style = {lightgray},
+        minor grid style = {lightgray!25},
+        width = 8cm,
+        height = 8cm,
+        axis x line=center,
+        axis y line=center,
+        xlabel = {$x$},
+        ylabel = {$y$},
+        xlabel style={above left},
+        ylabel style={below right}]
+
+          \path[name path=lower_bound] (axis cs:0,0) -- (axis cs:8,0);
+          \path[name path=upper_bound] (axis cs:0,8) -- (axis cs:8,8);
+
+          % draws point
+          \node [blue, mark=*](x_1) at (1,2) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of x_1]{ $\sample[1]$};
+          \node [blue](x_2) at (3,2) {$\bullet$};
+          \node [below left = -0.32cm and -0.32cm of x_2]{$\sample[2]$};
+          \node [blue](x_3) at (3.25,2) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of x_3]{$\sample[3]$};
+
+          \draw[fill=gray!50, draw=gray!70,semitransparent] (1.75,1.75) rectangle (2.25,2.25);
+          \node [red](x) at (2,2) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of x]{$\vinput$};
+
+          \draw [dashed] (axis cs:2, 0) -- (axis cs:2, 4) node (b12) {};
+          \node [below left = -0.20cm and -0.20cm of b12]{\scriptsize $\beta_{1,2}$};
+
+          \draw [dashed] (axis cs:2.125, 0) -- (axis cs:2.125, 4) node (b13) {};
+          \node [below right = -0.20cm and -0.20cm of b13]{\scriptsize $\beta_{1,3}$};
+
+          \draw [dashed] (axis cs:3.125, 0) -- (axis cs:3.125, 4) node (b23) {};
+          \node [below right = -0.20cm and -0.20cm of b23]{\scriptsize $\beta_{2,3}$};
+
+          \end{axis}
+    \end{tikzpicture}
+    \caption{Graph showing the dataset $\mathcal{S}$ and input sample of \autoref{exp:app-g}}
+    \label{subfig:exp-adv-dataset}
+  \end{subfigure}
+  \begin{subfigure}{0.4\linewidth}
+    \centering
+    \begin{tikzpicture}[>=latex, scale=0.9, baseline={(2.5,2.5)}]
+
+      \tikzset{% This is the style settings for nodes
+      vertex/.style={circle,minimum size=1.5cm,fill=white,draw,
+                  general shadow={fill=gray!60,shadow xshift=1pt,shadow yshift=-1pt}}}
+
+
+      \node [vertex](s_1) at (1,8) {$\vec{s}_1$};
+      \node [vertex](s_2) at (5,8) {$\vec{s}_2$};
+      \node [vertex](s_3) at (3,5) {$\vec{s}_3$};
+
+      \draw [->,very thick] (s_1) to[bend right=10]  (s_2);
+      \draw [->,very thick] (s_2) -- (s_3);
+
+      \draw [->,very thick] (s_2) to[bend right=10] (s_1);
+      \draw [->,very thick] (s_1) to[bend right=10] (s_3);
+      \draw [->,very thick] (s_3) to[bend right=10] (s_1);
+
+    \end{tikzpicture}
+    \captionsetup{justification=centering}
+    \caption{APP-G of input sample of \autoref{exp:app-g}}
+    \label{subfig:app-G-fig}
+  \end{subfigure}
+
+  \caption[Example showing a \acs{APP-G}]{Example showing the \acs{APP-G} of the input sample of \autoref{exp:app-g}}
+  \label{fig:app-g-example}
+\end{figure}
+\end{example}
+
+\begin{proposition}
+\label{prop:adv-predecessors-prop}
+Given a sample $\sample[] \in \set$ and a \acs{APP-G} $\APPG$
+\[
+  \boldsymbol{\mathtt{pred}}^A(\sample[]) = \bigcap_{\x[]' \in \pert}  \boldsymbol{\mathtt{pred}}_{\x[]'}(\sample[])
+\]
+where $\boldsymbol{\mathtt{pred}}^A(\sample[])$ and $\boldsymbol{\mathtt{pred}}_{\x[]'}(\sample[])$ are the predecessor of $\sample[]$ within the \acs{APP-G} of $\x[]$ and \acs{PP-G} of a sample $\boldsymbol{x}'$ within $\pert$ respectively.
+\end{proposition}
+\begin{proof}
+We can prove the preposition by demonstrating both direction of inclusion of the equality:
+\begin{itemize}
+  \item ($\bm{\subseteq}$): Suppose $\sample \in \boldsymbol{\mathtt{pred}}^A(\sample[])$. By definition of adversarial proximity precedence graph and \autoref{def:closer-to-adv-region}, we have that $\apre{\sample}{\sample[]} \wedge \napre{\sample[]}{\sample}$ which imply that every point in $\pert$ is strictly closer to $\sample$ than $\sample[]$. Consequently, by definition of proximity precedence graph and \autoref{def:closer-to-input}, $\sample \in \pred{\sample[]}$ in the \acs{PP-G} of any point within $\pert$. This means that
+  \[
+    \sample \subseteq \bigcap_{\x[]' \in \pert}  \boldsymbol{\mathtt{pred}}_{\x[]'}(\sample[])
+  \]
+  \item ($\bm{\supseteq}$): Suppose $\sample \in \pred{\sample[]}$ in the \acs{PP-G} of any point within $\pert$. Then by definition of proximity precedence graph and \autoref{def:closer-to-input}, it means the every point in $\pert$ is strictly closer to $\sample$ than $\sample[]$. As consequence, By  \autoref{def:closer-to-adv-region}, $\apre{\sample}{\sample[]} \wedge \napre{\sample[]}{\sample}$ which means that
+  \[
+    \sample \in \boldsymbol{\mathtt{pred}}^A(\sample[])
+  \]
+\end{itemize}
+\end{proof}
+
+\autoref{alg:APP-G-creation} shows how the \acs{APP-G} $\APPG$ of an input sample $\vinput \in \R$ can be created given the dataset $\set$ and the perturbation magnitude $\epsilon$. The procedure is the same as \autoref{alg:PP-G} with the only difference being the order relation used which in this case is $ \preccurlyeq^A_{(\vinput, \epsilon)}$.
+
+\begin{algorithm}[H]
+	\caption[$\algtitle{CreateAPPGraph}$ method]{$\algtitle{CreateAPPGraph}$ method}
+	\label{alg:APP-G-creation}
+	\begin{algorithmic}[1]
+    \Require{$S$: A training set, $\vinput$: The input sample, $\epsilon$: The perturbation magnitude}
+    \Ensure{The adversarial proximity precedence graph $\APPG$ of $\vinput$}
+
+    \State $V \gets S_X$
+    \State $E \gets \varnothing$
+		\ForAll {$(\sample[i],\sample[j]) \in \{(\sample[i], \sample[j]) \mid \sample[i],\sample[j] \in V, \sample[i] \not\eq \sample[j]\}$}
+
+      \If {$\sample[i] \preccurlyeq^A_{(\vinput, \epsilon)} \sample[j]$}
+        \State $E \gets E \cup \{(\sample[i], \sample[j])\}$
+      \EndIf
+    \EndFor
+		\State \Return $(V, E)$
+	\end{algorithmic}
+\end{algorithm}
+
+\subsection{Nearest Neighbors Selection}
+\label{subsec:valid-path-selection}
+
+Like the \acs{G-$k$NN} algorithm, once the graph is constructed, the certifier identifies the possible $k$ nearest neighbors of each point inside the adversarial region. To achieve this it finds all the paths comprised of $k$ samples within the \acs{APP-G} $\APPG$ of the input sample that are valid in some \acs{PP-G} of a point $\x[]' \in \pert$. Such paths will be called \emph{adversarially valid}. Formally:
+
+\begin{definition}[Adversarially valid path]
+\label{def:adversarially-valid-path}
+Given an adversarial proximity precedence graph $\APPG$, let $\vpath = [\sample[1], \sample[2],\ldots, \sample[m]]$ be a path in $\APPG$. Then  $\mathcal{P}$ is called \emph{adversarially valid} if
+\begin{enumerate}
+  \item $\forall \sample[i] \in \mathcal{P}.\ \forall \sample[j] \in \pred{\sample[i]}.\ \sample[j]$ is a predecessor of $\sample[i]$ in $\vpath$;
+  \item $\exists \x[]' \in \pert$ such that $\vpath$ is valid in the \acs{PP-G} of $\x[]'$.
+\end{enumerate}
+\end{definition}
+\begin{proposition}
+\label{prop:invalid-path-in-appg}
+Not all paths of a \acs{APP-G} are adversarially valid.
+\end{proposition}
+\begin{proof}
+Consider the dataset $\set \subset \R[2]$ and the adversarial region of the input sample $\x[] \in \R[2]$ shown in \autoref{subfig:exp-not-adv-valid-path-dataset}. In this case all samples in $\set$ are equidistant from the adversarial region and consequently, the \acs{APP-G} $\APPG$ of the input forms a clique as illustrated in \autoref{subfig:not-adv-valid-path-app-G},
+
+Consider, for instance, the path $\vpath = [\sample[1], \sample[3], \sample[2]]$. $\vpath$ satisfy the first condition of \autoref{def:adversarially-valid-path} but not the second. This is because for $\vpath$ to be adversarially valid there must exist a point $\x[]' \in \pert$ such that $\sample[1]$ is the nearest sample to $\x[]'$, $\sample[3]$ is the second closest and $ \sample[2]$ the third closest, however such $\x[]'$ does not exist. The region of space containing points closer to $\sample[1]$ than any other samples (i.e., the region highlighted with blue) does not intersect with the region containing points closer to sample $\sample[3]$ than $\sample[2]$ (i.e., the region colored with green).
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.5\linewidth}
+    \begin{tikzpicture}[>=latex, scale=0.9]
+      \centering
+      \begin{axis}[
+        xmin = 0, xmax = 2,
+        ymin = 0, ymax = 2,
+        xtick distance = 1,
+        ytick distance = 1,
+        grid = both,
+        minor tick num = 9,
+        major grid style = {lightgray},
+        minor grid style = {lightgray!50},
+        width = 8cm,
+        height = 8cm,
+        axis x line=center,
+        axis y line=center,
+        xlabel = {$x$},
+        ylabel = {$y$},
+        xlabel style={above left},
+        ylabel style={below right}]
+
+
+          \draw[fill=blue!25,draw=none,semitransparent] (0, 0) rectangle (0.75, 2);
+
+          \draw [dashed] (0.75, 0) -- (0.75, 2);
+
+          \draw[fill=green!25,draw=none,semitransparent] (1.25, 0) rectangle (2, 2);
+
+          \draw [dashed] (1.25, 0) -- (1.25, 2);
+
+          \draw[fill=gray!70, draw=gray!70,semitransparent] (0.50,0.50) rectangle (1.50,1.50);
+          \node [red](x) at (1,1) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of x]{$\vinput$};
+
+
+          \node [blue](s_1) at (0.50,1.60) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of s_1]{ $\sample[1]$};
+
+          \node [blue](s_2) at (1,1.60) {$\bullet$};
+          \node [below left = -0.32cm and -0.32cm of s_2]{$\sample[2]$};
+
+          \node [blue](s_3) at (1.50,1.60) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of s_3]{$\sample[3]$};
+
+          \end{axis}
+    \end{tikzpicture}
+    \caption{Graph showing the dataset $\mathcal{S}$ and input sample of \autoref{prop:invalid-path-in-appg}}
+    \label{subfig:exp-not-adv-valid-path-dataset}
+  \end{subfigure}
+  \begin{subfigure}{0.4\linewidth}
+    \centering
+    \begin{tikzpicture}[>=latex, scale=0.9, baseline={(2.5,2.5)}]
+
+      \tikzset{% This is the style settings for nodes
+      vertex/.style={circle,minimum size=1.5cm,fill=white,draw,
+                  general shadow={fill=gray!60,shadow xshift=1pt,shadow yshift=-1pt}}}
+
+
+      \node [vertex](s_1) at (1,8) {$\vec{s}_1$};
+      \node [vertex](s_2) at (5,8) {$\vec{s}_2$};
+      \node [vertex](s_3) at (3,5) {$\vec{s}_3$};
+
+      \draw [->,very thick] (s_1) to[bend right=10] (s_2);
+      \draw [->,very thick] (s_1) to[bend right=10] (s_3);
+
+      \draw [->,very thick] (s_2) to[bend right=10] (s_3);
+      \draw [->,very thick] (s_2) to[bend right=10] (s_1);
+
+      \draw [->,very thick] (s_3) to[bend right=10] (s_1);
+      \draw [->,very thick] (s_3) to[bend right=10] (s_2);
+
+    \end{tikzpicture}
+    \captionsetup{justification=centering}
+    \caption{APP-G of input sample of \autoref{prop:invalid-path-in-appg}}
+    \label{subfig:not-adv-valid-path-app-G}
+  \end{subfigure}
+
+  \caption[Example of non adversarially valid path in a \acs{APP-G}]{Example of non adversarially valid path in a \acs{APP-G}}
+  \label{fig:not-adv-valid-path}
+\end{figure}
+\end{proof}
+
+\noindent Determining if a path $\vpath$ is adversarial valid by exhaustively searching for a point in the adversarial region whose \acs{PP-G} includes $\vpath$ as valid path is computationally intractable due the infinite cardinality of $\pert$. A more efficient strategy is to define a region $R$ of points such that the sequence of samples defined by $\vpath$ is ordered according to the distance to those points. The path's adversarial validity can then be assessed by checking for an intersection between $R$ and the adversarial region. To see how this can be achieved consider the dataset of \autoref{prop:invalid-path-in-appg}. The path $[\sample[2]]$ is adversarially valid if there exist a region of points $R_1 \in\pert$ intersecting with $\pert$ such that the sample $[\sample[2]]$ is the closest to those points. This means that points in $R_1$ must satisfy the following linear system of inequalities:
+
+\[
+  \left\{
+  \begin{alignedat}{1}
+      x_1& - 1.25 \le 0\\
+      -x_1& + 0.75 \le 0\\
+      0.50& \le x_1 \le 1.50\\
+      0.50& \le x_2 \le 1.50
+  \end{alignedat}
+  \right.
+\]
+where $x_1 - 1.25 = 0$ and $x_1 + 0.75 = 0$ are the perpendicular bisector between the samples $\sample[2]$ and $\sample[3]$ and samples $\sample[1]$ and $\sample[2]$ respectively. The region $R_1$ does exist as it shown  \autoref{subfig:R1-region} as the red highlighted area of the perturbation region. Consider now the path $[\sample[2], \sample[1]]$. This path is valid if it exists a region of points $R_2 \in \pert$, intersecting the adversarial region, such that the closest sample to them $\sample[2]$ and the second closest is $\sample[1]$. So points in $R_2$ must satisfy the following linear system of inequalities:
+
+\begin{equation}
+\label{eq:polyotope}
+\left\{\begin{aligned}
+&\left.
+    \begin{alignedat}{1}
+      x_1& - 1.25 \le 0\\
+      -x_1& + 0.75 \le 0\\
+    \end{alignedat}
+\right\}\dashrightarrow \text{region of points closer to } \sample[2] \text{ than any other samples}\\
+&\ \,\,  x_1 - 1 \le 0 \dashrightarrow \text{region of points closer to } \sample[1] \text{ than } \sample[3]\\
+&\left.
+  \begin{alignedat}{1}
+      0.50& \le x_1 \le 1.50\\
+      0.50& \le x_2 \le 1.50
+  \end{alignedat}
+\right\}\dashrightarrow \text{ adversarial region}
+\end{aligned}
+  \right.
+\end{equation}
+where the first two inequalities define the $R_1$ region while the third inequality is the region of space where points are closer to $\sample[1]$ than $\sample[3]$. This region is shown with the blue area in \autoref{subfig:R2-region}. Finally, the same logic applies to path $[\sample[2], \sample[1], \sample[3]]$ which defined the same the linear system as \autoref{eq:polyotope}. On the other hand the linear system of inequalities associated with path $[\sample[1], \sample[3]]$ is the following
+
+\begin{equation}
+  \left\{\begin{aligned}
+  &\ \ x_1 - 0.75 \le 0
+  \dashrightarrow \text{region of points closer to } \sample[1] \text{ than any other samples}\\
+  &-x_1 + 1.25 \le 0 \dashrightarrow \text{region of points closer to } \sample[3] \text{ than } \sample[2]\\
+  &\left.
+    \begin{alignedat}{1}
+        0.50& \le x_1 \le 1.50\\
+        0.50& \le x_2 \le 1.50
+    \end{alignedat}
+  \right\}\dashrightarrow \text{adversarial region}
+  \end{aligned}
+    \right.
+\end{equation}
+
+The regions defined by the first two equations are illustrated in \autoref{subfig:exp-not-adv-valid-path-dataset}. As can be seen from the plot the two regions do not intersect hence the linear system has no solutions. So the path $[\sample[1], \sample[3]]$ and consequently$[\sample[1], \sample[3], \sample[2]]$ are not adversarially valid paths.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.4\linewidth}
+    \begin{tikzpicture}[>=latex, scale=0.9]
+      \centering
+      \begin{axis}[
+        xmin = 0, xmax = 2,
+        ymin = 0, ymax = 2,
+        xtick distance = 1,
+        ytick distance = 1,
+        grid = both,
+        minor tick num = 9,
+        major grid style = {lightgray},
+        minor grid style = {lightgray!50},
+        width = 7cm,
+        height = 7cm,
+        axis x line=center,
+        axis y line=center,
+        xlabel = {$x$},
+        ylabel = {$y$},
+        xlabel style={above left},
+        ylabel style={below right}]
+
+
+          \draw[fill=red!56,draw=none,semitransparent] (0.75, 0.5) rectangle (1.25, 1.5);
+
+          \draw[fill=gray!70, draw=gray!70,semitransparent] (0.50,0.50) rectangle (1.50,1.50);
+          \node [red](x) at (1,1) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of x]{$\vinput$};
+
+
+          \node [blue](s_1) at (0.50,1.60) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of s_1]{ $\sample[1]$};
+
+          \node [blue](s_2) at (1,1.60) {$\bullet$};
+          \node [below left = -0.32cm and -0.32cm of s_2]{$\sample[2]$};
+
+          \node [blue](s_3) at (1.50,1.60) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of s_3]{$\sample[3]$};
+
+          \end{axis}
+    \end{tikzpicture}
+    \caption{Graph showing region $R_1$}
+    \label{subfig:R1-region}
+  \end{subfigure}
+  \begin{subfigure}{0.5\linewidth}
+    \centering
+    \begin{tikzpicture}[>=latex, scale=0.9]
+      \centering
+      \begin{axis}[
+        xmin = 0, xmax = 2,
+        ymin = 0, ymax = 2,
+        xtick distance = 1,
+        ytick distance = 1,
+        grid = both,
+        minor tick num = 9,
+        major grid style = {lightgray},
+        minor grid style = {lightgray!50},
+        width = 7cm,
+        height = 7cm,
+        axis x line=center,
+        axis y line=center,
+        xlabel = {$x$},
+        ylabel = {$y$},
+        xlabel style={above left},
+        ylabel style={below right}]
+
+          \draw[fill=red!50,draw=none,semitransparent] (1, 0.5) rectangle (1.25, 1.5);
+
+          \draw[fill=blue,draw=none,semitransparent] (0.75, 0.5) rectangle (1, 1.5);
+
+          \draw[fill=gray!70, draw=gray!70,semitransparent] (0.50,0.50) rectangle (1.50,1.50);
+          \node [red](x) at (1,1) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of x]{$\vinput$};
+
+
+          \node [blue](s_1) at (0.50,1.60) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of s_1]{ $\sample[1]$};
+
+          \node [blue](s_2) at (1,1.60) {$\bullet$};
+          \node [below left = -0.32cm and -0.32cm of s_2]{$\sample[2]$};
+
+          \node [blue](s_3) at (1.50,1.60) {$\bullet$};
+          \node [below right = -0.32cm and -0.32cm of s_3]{$\sample[3]$};
+
+          \end{axis}
+    \end{tikzpicture}
+    \captionsetup{justification=centering}
+    \caption{Graph showing regions $R_1$ and $R_2$}
+    \label{subfig:R2-region}
+  \end{subfigure}
+
+  \caption[Example showing how to assess the adversarial validity of a path in a \acs{APP-G}]{Example showing how to assess the adversarial validity of a path in an \acs{APP-G}}
+  \label{fig:adv-validity-regions}
+\end{figure}
+
+\noindent In summary, given a path $\vpath$, the idea is to find a polytope within the perturbation region such that for any point $\x[]'$ within this polytope, the sequence of samples defined by $\vpath$ is ordered by their distance to $\x[]'$. This polytope is defined by a system of linear inequalities. If this system has a solution (i.e., the polytope exists), it implies the existence of at least one \acs{PP-G} $\PPG[{\x[]'}]$ for some $\x[]' \in \pert$ such that $\vpath$ is valid in $\PPG[{\x[]'}]$. Conversely, if the linear system has no solutions, it means that no such \acs{PP-G} exists and so $\vpath$ is not adversarially valid. Given its role in determining the validity of $\vpath$, we refer to this polytope as the \emph{validity polytope} of the path.
+
+Given the path $\vpath = [\sample[1], \sample[2],\ldots, \sample[m]]$ and the adversarial region $\pert$ of the input sample $\vinput$ the system of linear inequalities defining the validity polytope of $\vpath$ is the following
+
+\begin{equation}
+\label{polytope-system}
+  \left\{
+  \begin{aligned}
+    &\textsc{Closer}(\sample[1], \samedist{\sample[1]})\\
+    &\textsc{Closer}(\sample[2], \samedist{\sample[2]}\setminus\{\sample[1]\})\\
+    &\hspace{2.5cm}\vdots\\
+    &\textsc{Closer}(\sample[i], \samedist{\sample[i]}\setminus\{\sample[1],\ldots \sample[i-1]\})\\
+    &\hspace{2.5cm}\vdots\\
+    &\textsc{Closer}(\sample[m], \samedist{\sample[m]}\setminus\{\sample[1],\ldots \sample[m-1]\})\\
+    &x_1 - \epsilon \le x_1 \le x_1 + \epsilon\\
+    &\hspace{1.5cm}\vdots\\
+    &x_n - \epsilon \le x_n \le x_n + \epsilon
+  \end{aligned}
+  \right.
+\end{equation}
+where $\algtitle{Closer}$ is a method, shown in \autoref{alg:closer}, that, given a sample $\sample[] \in \set$ and a set of samples $S \subseteq  \set$, returns the set of inequalities defining the region of points closer to $\sample[]$ than any sample in $S$. To do this it computes, for each $\sample \in S$,the perpendicular bisector $\beta: a_1x_1 + a_2x_2 +\cdots+a_nx_n = b$ between $\sample[]$ and $\sample[i]$ such that $\beta(\sample[]) \le 0$ (line $3$) and add the inequality $a_1x_1 + a_2x_2 +\cdots+a_nx_n \le b$ to the returned set of inequality (line $4$).
+
+\begin{algorithm}[H]\
+	\caption[$\algtitle{Closer}$ method]{$\algtitle{Closer}$ method}
+	\label{alg:closer}
+	\begin{algorithmic}[1]
+    \Require{$\sample[]$: A sample, $S$: A set of sample}
+    \Ensure{Set of linear of inequalities defining a region with point closer to $\sample[]$ than any sample in $S$}
+    \State $\var{ineq} \gets \emptyset$
+    \ForAll {$\sample \in S$}
+      \State $a_1x_1 + a_2x_2 +\cdots+a_nx_n = b \gets \textsc{Bisector}(\sample[], \sample)$
+      \State $\var{ineq} \gets \var{ineq} \cup \{a_1x_1 + a_2x_2 +\cdots+a_nx_n \le b\}$
+    \EndFor
+    \State \Return $\var{ineq}$
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{definition}[Adversarially safe sample]
+Let $\vpath = [\sample[1], \sample[2],\ldots, \sample[m]]$ be an adversarially valid path within an \acs{APP-G} $\APPG$. Then a sample $ \sample[m+1] \in \set, \sample[m+1] \notin \vpath$ is called an \emph{adversarially safe} sample for $\vpath$ if the path $\vpath' = \vpath' + [\sample[m+1]]=[\sample[1], \sample[2],\ldots, \sample[m], \sample[m+1]]$ is adversarially valid.
+\end{definition}
+
+\noindent To determine if a sample $\sample[] \in \set$ is adversarially safe for path $\vpath$, we first check if all its predecessors (i.e., $\pred{\sample[]}$) are present in $\vpath$. Then, we verify the existence of the validity polytope for the extended path $\vpath + [\sample[]]$ by checking the consistency of the linear system obtained by adding the inequalities in $\algtitle{Closer}(\sample[], \samedist{\sample[]}\setminus\vpath)$ to the linear system defining the validity polytope of $\vpath$. If the resulting linear system is consistent (i.e., has a solution), then $\sample[]$ is adversarially safe for $\vpath$; otherwise, it is not.
+
+\autoref{alg:extract-adv-valid-paths} shows how all the adversarially valid paths with $n$ samples are extracted from a given \acs{APP-G} $\APPG$ of the input sample. Essentially the procedure is the same as \autoref{alg:extract-valid-paths} with only the difference being that a sample is added to a path if it is adversarially safe for that path.
+
+\begin{algorithm}[H]
+	\caption[$\algtitle{SelectAdvValidPaths}$ method]{$\algtitle{SelectAdvValidPaths}$ method}
+	\label{alg:extract-adv-valid-paths}
+	\begin{algorithmic}[1]
+    \Require{$\APPG$: An \acs{APP-G},\\
+             $n$: number of samples in the path}
+    \Ensure{Set of all adversarially valid paths comprised $n$ samples}
+    \State $\var{queue} \gets \{[\sample] \mid \sample \in \mathbb{G}_{\vinput}
+    \wedge \pred{\sample} = \emptyset\}$
+    \State $\var{k} \gets 1$
+    \While {$\var{queue} \textbf{ not empty}$}
+      \State $\var{current\_paths} \gets \var{queue}.\textsc{PopAll()}$
+      \If {$\var{k} = n$}
+          \State \Return $\var{current\_paths}$
+      \EndIf
+
+      \ForAll {$\var{path} \textbf{ in } \var{current\_paths}$}
+        \State $\var{last\_sample} \gets \var{path.last()}$
+        \ForAll {$\var{sample} \textbf{ in } \adj{\var{last\_sample}}$}
+          \If {$\var{sample} \textbf{ is adversarially safe for } \var{path}$}
+            \State $\var{queue}.\textsc{append}(\var{path} + [\var{sample}])$
+          \EndIf
+        \EndFor
+      \EndFor
+      \State $\var{k} \gets \var{k} + 1$
+      \EndWhile
+	\end{algorithmic}
+\end{algorithm}
+\iffalse
+\fi
+\begin{proposition}
+\label{prop:extract-all-adv-valid-paths}
+Given an \acs{APP-G} $\APPG$ and the length $n \in \N$, \autoref{alg:extract-adv-valid-paths} returns all the adversarially valid paths comprised of $n$ samples within $\APPG$.
+\end{proposition}
+\begin{proof}
+The proposition can be proved by showing that in the $k$-th iteration of the while loop, at line $4$ the queue contains all the valid paths with $k$ samples.
+We proceed by induction on $k$:
+\begin{itemize}
+  \item \textbf{Base Case}($k = 1$): In the first iteration of the loop the queue contains all the path made of a single sample $\sample[] \in \set$ such that $\pred{\sample} = \emptyset$.  By definition of \acs{APP-G} and \autoref{def:closer-to-adv-region}, there exists a region $R \subseteq \pert$ within whose points are closer to $\sample[]$ than any other sample in $\set$. Consequently, by \autoref{prop:starting-sample} the path $[\sample[]]$ is a valid in the \acs{PP-G} of points in $R$. So this means that all the paths in the queue are adversarial valid. Additionally, the queue is surely non-empty due to the voronoi tesselation \cite{voronoi-tessellation} of $\R$ induced by the samples in $\set$.
+  \item \textbf{Inductive Case}($k = h+1, h \ge 1$): At iteration $h$+1, the paths inside the queue at line $4$ are obtained by extending all the paths in the queue in the $h$-th iteration with every adversarially safe sample among the adjacent of the path's last sample. By induction hypothesis the queue in the $h$-th iteration contains all the adversarially valid paths with $h$ samples and since they are extended with every adversarially safe samples it means that in the $h$+1 iteration the queue contains only and all the adversarially valid paths comprised of $h+1$.
+\end{itemize}
+\end{proof}
+
+\subsection{Full Algorithm}
+\label{subsec:full-algorithm}
+
+
+\autoref{alg:certifier-full} shows the full algorithm of the exact certifier. Given the sample dataset $\set$, the input sample $\vinput$, and the perturbation magnitude $\epsilon$, the certifier starts by constructing the \acs{APP-G} $\APPG$ of the input sample using the $\algtitle{CreateAPPGraph}$ method (line $1$). Next, it extracts all adversarially valid paths consisting  of $k$ samples using the $\algtitle{SelectAdvValidPaths}$ method (line $2$), and then collects the most frequent labels within each path (lines $3$-$6$). Finally, these collected labels are returned as the possible classification of points in the adversarial region (line $8$).
+
+\begin{algorithm}[H]
+	\caption[$\algtitle{Certifier}$ algorithm]{$\algtitle{Certifier}$ algorithm}
+	\label{alg:certifier-full}
+	\begin{algorithmic}[1]
+    \Require{$\set$: A dataset, $\vinput$: The input sample\\
+             $\epsilon$: The perturbation magnitude, $k$: The number neighbors to look for}
+    \Ensure{Set of possible labels that points in $\pert$ can be classified with}
+    \State $\APPG \gets \algtitle{CreateAPPGraph}(\set, \vinput, \epsilon)$
+    \State $\var{paths} \gets \algtitle{SelectAdvValidPaths}(\APPG,\ $k$)$
+    \State $\var{classification} \gets \emptyset$
+    \ForAll {$\var{path} \textbf{ in } \var{paths}$}
+      \State $\var{labels} \gets $ most frequent labels in $\var{path}$
+      \State $\var{classification} \gets \var{classification} \cup \var{labels}$
+    \EndFor
+    \State \Return $\var{classification}$
+	\end{algorithmic}
+\end{algorithm}
+
+\begin{theorem}[Certifier Exactness]
+  Given a dataset $\set = \{(\sample, l_{\sample}) \mid \sample \in \R, l_{\sample} \in \mathcal{L}\}_{i=1}^{i=n}$ and the input sample's adversarial region $\pert$ of magnitude $\epsilon$, the certifier returns exactly the labels assigned by \acs{G-$k$NN} to the points within $\pert$ that is
+  \[
+    \forall k,\epsilon \in \N\ \forall \vinput \in \R\quad \algtitle{Certifier}(\set,\vinput, \epsilon, k) = \bigcup_{\x[]' \in \pert} \algtitle{G-kNN}(\set,\vinput,k)
+  \]
+\end{theorem}
+\begin{proof}
+The set of labels returned by \algtitle{Certifier} and $\algtitle{G-kNN}$ consists of the most frequent labels of the samples forming the paths of length $k-1$ extracted from the \acs{APP-G} $\APPG$ and \acs{PP-G} $\PPG[{\x[]'}]$ of the input sample respectively. Consequently, the theorem can be demonstrated by proving the following equality
+
+\begin{equation}
+\label{eq:exact-equality}
+\forall k,\epsilon \in \N\ \forall \vinput \in \R\quad \algtitle{PathExtracted}^A(\APPG) = \bigcup_{\x[]' \in \pert} \algtitle{PathExtracted}(\PPG[{\x[]'}])
+\end{equation}
+
+\noindent where $\algtitle{PathExtracted}^A(G)$ denotes the set of paths extracted from \acs{APP-G} by $\algtitle{Certifier}$ and  $\algtitle{PathExtracted}(G)$ represents the set of paths extracted from the \acs{PP-G} by $\algtitle{G-kNN}$. We proceed by demonstrating both direction of inclusion of \autoref{eq:exact-equality}:
+
+\begin{itemize}
+  \item ($\bm{\subseteq}$): Suppose the path $\vpath$ within the \acs{APP-G} $\APPG$ of the input $\vinput$ is an adversarially valid path. Then, by definition \autoref{def:adversarially-valid-path}, there exists a point $\x[]' \in \pert$ such that $\vpath$ is valid path in the \acs{PP-G} of $\x[]'$. Consequently, by \autoref{prop:extract-all-valid-path}
+  \[
+     \vpath \in \bigcup_{\x[]' \in \pert} \algtitle{PathExtracted}(\PPG[{\x[]'}])
+  \]
+  \item ($\bm{\supseteq}$): Without loss of generality consider a valid path $\vpath = [\sample[1], \sample[2],\ldots,\sample[k]]$ in the \acs{PP-G} $\PPG[{\x[]'}]$ of some point $\vinput' \in \pert$. By definition of \acs{PP-G}
+  \[
+    \pre[\vinput']{\sample[1]}{\pre[\vinput']{\sample[2]}{\pre[\vinput']{\cdots}{\sample[k]}}}
+  \]
+  and so, by definition of $\apre{}{}$
+  \[
+    \apre{\sample[1]}{\apre{\sample[2]}{\apre{\cdots}{\sample[k]}}}
+  \]
+  This indicates that $\vpath$ is also a path in the \acs{APP-G} $\APPG$ of $\vinput$. Moreover, since $\vpath$ is a valid path in $\PPG[{\x[]'}]$, by \autoref{def:valid-path} and \autoref{prop:adv-predecessors-prop}, every sample in $\vpath$ is preceded by its predecessor in $\APPG$. This implies that $\vpath$ satisfies the requirements of \autoref{def:adversarially-valid-path} and therefore, by \autoref{prop:extract-all-adv-valid-paths}, $\vpath \in \algtitle{PathExtracted}^A(G)$. \qedhere
+\end{itemize}
+
+\end{proof}

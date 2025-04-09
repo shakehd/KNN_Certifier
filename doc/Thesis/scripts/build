@@ -1,0 +1,28 @@
+#!/bin/sh
+BASEDIR=$(dirname $0)
+cd $BASEDIR
+cd ..
+
+# Build the dissertation
+xelatex -shell-escape -output-driver="xdvipdfmx -z 0" dissertation
+bibtex dissertation
+xelatex -shell-escape -output-driver="xdvipdfmx -z 0" dissertation
+xelatex -shell-escape -output-driver="xdvipdfmx -z 0" dissertation
+
+# Clean the dissertation
+cd chapters
+rm *.aux
+cd ..
+rm *.aux
+rm *.bbl
+rm *.blg
+rm *.loa
+rm *.lof
+rm *.log
+rm *.lot
+rm *.lua
+rm *.out
+rm *.synctex.gz
+rm *.timestamp
+rm *.toc
+rm *.xmpi

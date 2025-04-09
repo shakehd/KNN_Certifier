@@ -1,0 +1,18 @@
+\appendix
+
+\begin{frame}{Graph Construction Optimization}
+
+  Consider only the samples within the hyperball centered in $x$ and radius
+               \[
+                     2\epsilon\sqrt{N} + d
+               \]
+  where \begin{itemize}
+     \item $\epsilon$ is the radius of the $\ell_{\infty}$ ball;
+     \item $d$ the distance between $x$ and its $k$-th closest sample;
+     \item $N$ is the number of features;
+  \end{itemize}
+  \begin{alertblock}{Proposition}
+     Given a perturbation region $P^{\epsilon}(x)$, the hyperball centered in $x$ with radius $2\epsilon\sqrt{N} + d$
+     contains the $k$ closest samples of every point $x_0 \in P^{\epsilon}(x)$
+  \end{alertblock}
+ \end{frame}

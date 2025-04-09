@@ -1,0 +1,111 @@
+%!TEX root = ../dissertation.tex
+
+\chapter{Introduction}
+\label{chp:introduction}
+
+Machine learning (\acs{ML}) models are finding widespread application in a multitude of fields, ranging from computer vision \cite{Mahadevkar22} and natural language processing to finance \cite{Zakaria23}, healthcare \cite{alanazi22}, and beyond. This widespread usage, particularly when applied in safety-critical domains (e.g., healthcare, autonomous transportation, etc.), where an error can lead to potentially irreversible and life-threatening consequences \cite{ai-safety}, has led to the emergence of a body of research focused on the robustness and security of these methods. In the context of \acs{ML}, \emph{robustness} refers to the resilience of  the \acs{ML} system against vulnerabilities that can alter its expected behavior or outcome. One such vulnerability—and the focus of this work—is \emph{adversarial examples}, which are created by applying small perturbations to input samples, making them perceptually indistinguishable from the originals, in order to change the outcome of the \acs{ML} system. A \acs{ML} system is robust to an adversarial attack (i.e., when an adversarial example is given as input) if the outcome remains the same as the expected one for the unperturbed input. It is important to note that, by definition, determining the robustness of an adversarial example can only be done when the outcome of the unperturbed sample is known \emph{a priori}. This is only possible during testing, when the ground truth is available. If the outcomes of the unperturbed sample and adversarial example are the same, regardless of accuracy, the \acs{ML} system is defined as \emph{stable}. So, stability only requires the outcome to be the same, while robustness also imposes the correctness constraint, meaning that the outcome must coincide with the one associated with the test sample.
+
+Adversarial examples pose a significant security risk for practical machine learning applications. For example, consider a \acs{ML} system that receives voice commands. A malevolent agent could create a seemingly innocuous recording, such as a song, that contains hidden voice commands imperceptible to humans but recognizable by the \acs{ML} system. This recording would be an adversarial example, as the \acs{ML} system should have ignored the input. Another example of an adversarial attack impacting the reliability of a \acs{ML} system is in the face recognition domain. An adversarial example in this scenario could be obtained by applying imperceptible changes to a person's face image, so a human observer would recognize their identity correctly, but the \acs{ML} system would recognize them as a different person. Robustness against adversarial attacks, whether accidental or intentional, is highly desirable for machine learning models. Unfortunately, several studies have demonstrated that ML models are highly susceptible to adversarial examples \cite{Dalvi04, szegedy2014, goodfellow2015, kurakin2018}. Moreover, in \cite{szegedy2014}, the authors showed that adversarial examples exhibit transferability, meaning that an adversarial example designed to affect model M$_1$ can often affect another model, M$_2$. This means it is possible to perform an adversarial attack on a \acs{ML} system without knowing the underlying model. Additionally, in \cite{kurakin2018}, the authors further showed that adversarial examples can also transfer to the physical world, meaning that \acs{ML} systems operating in the physical world and perceiving data through various sensors (e.g., cameras) are also vulnerable to adversarial examples.
+
+Given the potential risks posed by adversarial attacks, significant research has focused on mitigating these threats through robustness verification \cite{pmlr-v80-wong18a, Zhang2018} and adversarial training \cite{goodfellow2015, Carlini17, Biggio18}. However, much of this research has concentrated on (deep) neural network-based models, given their success and widespread adoption. As a result, relatively little attention has been given to other types of \acs{ML} models, one of which is $k$-nearest neighbors \cite{Fix1952DiscriminatoryA, fix1989discriminatory}, also known in literature as \acs{$k$-NN}. This method is mainly used for \emph{classification tasks}, where the objective is to assign a discrete label representing a certain category to an input sample. Following the simple intuition that similar data with respect to a similarity metric should be classified similarly, \acs{$k$-NN} infers the label for an input sample by taking the most frequent label among the $k$ most similar samples in a given dataset—hence the name $k$-nearest neighbors. Despite its simplicity, \acs{$k$-NN} is widely used in various applications \cite{Wu2007Top1A, Kramer2013}, and more recently, it has been combined with deep neural networks to solve tasks such as remote sensing image retrieval \cite{Ye2019ANR}, machine translation \cite{khandelwal2021}, and face recognition \cite{Nakada2017AcFRAF}. In particular, \acsp{$k$-NN} is successfully applied in various tasks where adversarial attacks must be considered. In chemistry, for instance, $1$-NN was used to classify molecular structures using nuclear magnetic resonance spectra \cite{Kowalski1972}, while the general version was used to classify sensor array data for two types of chemical warfare agents \cite{Shaffer1999ACS}, substances whose toxic properties are meant to kill, injure, or incapacitate human beings. A second example is \cite{tarek17}, where \acs{$k$-NN}, in combination with three feature selection methods, was used to classify three types of cancer: leukemia, colon, and breast cancer.
+
+In this research, we propose a novel algorithm to certify the robustness and stability of \acs{$k$-NN} against adversarial attacks. Our methodology models an adversarial attack as a small region $P(\vinput)$ of space around a test sample, $\vinput$, called the \emph{perturbation (or adversarial)} region of $\vinput$ and searches for the labels that \acs{$k$-NN} assigns to samples within $P(\vinput)$ (i.e., the adversarial examples). To find this labels, our approach constructs a directed graph where the nodes represent the samples in the training set. An edge from sample $\sample[i]$ to $\sample[j]$ indicates that there exists a point within the perturbation region that is closer to $\sample[i]$ than to $\sample[j]$ w.r.t to the Euclidean distance. The method then performs a principled traversal of this graph, starting from the samples with no incident edges, and collects the most frequent labels from paths consisting of $k$ samples. Only the paths whose elements satisfy the relative proximity to the adversarial examples are considered. Specifically, the most frequent labels are extracted from a path $\vpath = [\sample[1], \sample[2], \ldots, \sample[k]]$ only if there exists a point $\x' \in P(\vinput)$ such that $\sample[1]$ is the closest sample to $\x'$, $\sample[2]$ is the second closest, and so on. To determine the existence of the point $\x'$, we check for the intersection between the perturbation region and $k$ high-order Voronoi cells \cite{high-order-voronoi}, where the sites are the samples in $\vpath$. If there is an intersection, the path $\vpath$ is considered; otherwise, it is ignored in the traversal of the graph. If this method finds only a single label, we can guarantee with absolute certainty the stability of \acs{$k$-NN} for the sample $\vinput$ with respect to $P(\vinput)$. Additionally, if this single label coincides with the ground truth of $\vinput$, we can also conclude that the \acs{$k$-NN} classifier is robust for the sample $\vinput$. Otherwise, if more than one label are found, \acs{$k$-NN} is neither stable nor robust.
+
+We implemented this algorithm in Python and performed an exhaustive experimental evaluation of the final certifier on 7 datasets commonly used for formal robustness verification and on 4 standard datasets for individual fairness verification, achieving promising results in most of these. The experimental evaluation demonstrates that \acs{$k$-NN} is a fairly robust classification algorithm, as our certifier was able to certify the robustness of more than $90\%$ of the samples with adversarial perturbations of $\pm 3\%$ in most datasets.
+
+\begin{figure}[h]
+	\centering
+	\begin{subfigure}{0.5\linewidth}
+		\begin{tikzpicture}[>=latex, scale=0.9]
+			\centering
+			\begin{axis}[
+				xmin = 0, xmax = 4,
+				ymin = 0, ymax = 4,
+				xtick distance = 1,
+				ytick distance = 1,
+				grid = both,
+				minor tick num = 4,
+				major grid style = {lightgray},
+				minor grid style = {lightgray!25},
+				width = 8cm,
+				height = 8cm,
+				axis x line=center,
+				axis y line=center,
+				xlabel = {$x$},
+				ylabel = {$y$},
+				xlabel style={above left},
+				ylabel style={below right}]
+
+					\path[name path=lower_bound] (axis cs:0,0) -- (axis cs:8,0);
+					\path[name path=upper_bound] (axis cs:0,8) -- (axis cs:8,8);
+
+					% draws point
+					\node [green, mark=*](x_2) at (1,1.8) {$\bullet$};
+					\node [below right = -0.32cm and -0.32cm of x_2]{ $\sample[2]$};
+					\node [green](x_1) at (2,1.6) {$\bullet$};
+					\node [below right = -0.32cm and -0.32cm of x_1]{$\sample[1]$};
+					\node [blue](x_3) at (3,1.8) {$\bullet$};
+					\node [below right = -0.32cm and -0.32cm of x_3]{$\sample[3]$};
+					\node [blue](x_4) at (3,3.4) {$\bullet$};
+					\node [below right = -0.32cm and -0.32cm of x_4]{$\sample[4]$};
+
+					\draw[fill=gray!50, draw=gray!70,semitransparent] (1.75,1.75) rectangle (2.25,2.25);
+					\node [red](x) at (2,2) {$\bullet$};
+					\node [below right = -0.32cm and -0.32cm of x]{$\vinput$};
+
+					\end{axis}
+		\end{tikzpicture}
+		\caption{Input sample and the dataset $\mathcal{S}$ with two labels: \textit{blue} and \text{green}}
+		\label{subfig:intro-exp-adv-dataset}
+	\end{subfigure}
+	\begin{subfigure}{0.4\linewidth}
+		\centering
+		\begin{tikzpicture}[>=latex, scale=0.9, baseline={(2.7,2)}]
+
+			\tikzset{% This is the style settings for nodes
+			vertex/.style={circle,minimum size=1.5cm,fill=white,draw,
+									general shadow={fill=gray!60,shadow xshift=1pt,shadow yshift=-1pt}}}
+
+
+			\node [vertex](s_1) at (1,8) {$\vec{s}_1$};
+			\node [vertex](s_2) at (5,8) {$\vec{s}_2$};
+			\node [vertex](s_3) at (1,5) {$\vec{s}_3$};
+			\node [vertex](s_4) at (5,5) {$\vec{s}_4$};
+
+			\draw [->,very thick] (s_1) -- (s_2);
+			\draw [->,very thick] (s_1) -- (s_3);
+			\draw [->,very thick] (s_1) -- (s_4);
+
+			\draw [->,very thick] (s_2) to[bend right=10] (s_3);
+			\draw [->,very thick] (s_2) -- (s_4);
+
+			\draw [->,very thick] (s_3) to[bend right=10] (s_2);
+			\draw [->,very thick] (s_3) -- (s_4);
+
+
+		\end{tikzpicture}
+		\captionsetup{justification=centering}
+		\caption{Graph constructed by the certifier.}
+		\label{subfig:intro-app-G-fig}
+	\end{subfigure}
+
+	\caption[Example showing the algorithm]{Example showing the workings of the algorithm}
+	\label{fig:intr-app-g-example}
+\end{figure}
+
+\noindent \textbf{Illustrative Example.} Consider a dataset $\set \subset \mathbb{R}^2$ and the adversarial region $P(\vinput)$ of the input sample $\vinput \in \mathbb{R}^2$ with magnitude $\epsilon = 0.25$, as shown in \autoref{subfig:intro-exp-adv-dataset}. In this scenario, the sample $\sample[1]$ is the closest to any point in $P(\vinput)$, while the sample $\sample[4]$ is the farthest. The samples $\sample[2]$ and $\sample[3]$ are equidistant to $P(\vinput)$, meaning that there are points in $P(\vinput)$ that are closer to $\sample[2]$ than to $\sample[3]$ and vice versa.
+
+\autoref{subfig:intro-app-G-fig} shows the graph constructed by the certifier. There are no incident edges to $\sample[1]$ since it is the closest sample, and there are no outgoing edges from $\sample[4]$ as it is the farthest. The samples $\sample[2]$ and $\sample[3]$ are adjacent to each other since they are equidistant.
+
+With this graph, the certifier starts the traversal from $\sample[1]$, as it has no incoming edges. Depending on the value of $k$, it visits the other samples. If $k = 1$, the certifier stops at the first sample and returns the set $\{\emph{green}\}$. If $k = 2$, the certifier computes the most frequent label within the paths $[\sample[1], \sample[2]]$ and $[\sample[1], \sample[3]]$. The most frequent label is $\emph{green}$ for the first path and both colors for the second, due to a tie. Hence, the certifier returns the set $\{\emph{green}, \emph{blue}\}$. For $k = 3$, it collects the most frequent label within the paths $[\sample[1], \sample[2], \sample[3]]$ and $[\sample[1], \sample[3], \sample[2]]$. In both paths, the most frequent label is $\emph{green}$, so the certifier returns the singleton $\{\emph{green}\}$. Notice that the paths $[\sample[1], \sample[2], \sample[4]]$ and $[\sample[1], \sample[3], \sample[4]]$ are not considered, because there are no points in $P(\vinput)$ that are closer to $\sample[4]$ than to $\sample[3]$ in the first path, or to $\sample[2]$ in the second. Therefore, these paths are ignored during the graph traversal. Finally, for $k = 4$, there is only one path, which includes all the samples in $\set$, and again, due to a tie, the certifier returns the set $\{\emph{green}, \emph{blue}\}$.
+
+
+
+\noindent The remainder of this document is organized as follows:
+\begin{itemize}[leftmargin=	1.85cm]
+	\item[\autoref{chp:background}] describes the background needed to better understand the concepts covered in this research work, providing some basic notions about machine learning;
+	\item[\autoref{chp:related-works}] reviews state-of-the-art methods currently applied to verify major machine learning models and highlights some recent works finding adversarial examples on \acsp{$k$-NN};
+	\item[\autoref{chp:methodology}] describes our novel method, explaining in detail how it works and why it is exact;
+	\item[\autoref{chp:experimental-evaluation}] shows the experimental results obtained by executing our certifier on the reference datasets;
+	\item[\autoref{chp:conclusion-future-works}] sums up the contribution of this research work and proposes future improvements to possibly obtain even better performance.
+\end{itemize}

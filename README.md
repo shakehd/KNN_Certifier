@@ -11,26 +11,29 @@ To install this toool you need to clone or download this repository and run the 
 pip install -r requirements.txt
 ```
 This will install the following dependencies:
-- joblib version 1.3.2
-- nptyping version 2.5.0
-- numpy version 1.26.1
-- pandas version 2.1.3
-- python-dateutil version 2.8.2
-- pytz version 2023.3.post1
-- scikit-learn version 1.3.2
-- scipy version 1.12.0
-- six version 1.16.0
-- threadpoolctl version 3.2.0
-- tomli version 2.0.1
-- tqdm version 4.66.1
-- tzdata version 2023.4
+- joblib==1.4.2
+- nptyping==2.5.0
+- numpy==1.26.4
+- optype==0.9.2
+- pandas==2.2.3
+- Pebble==5.1.1
+- python-dateutil==2.9.0.post0
+- pytz==2025.1
+- scikit-learn==1.6.1
+- scipy==1.15.2
+- scipy-stubs==1.15.2.1
+- six==1.17.0
+- threadpoolctl==3.6.0
+- tomli==2.2.1
+- tqdm==4.67.1
+- tzdata==2025.1
 
 ## Usage
 
 To run this tool simply launch the following command inside the repo folder:
 
 ```[bash]
-python abstract_classifier.py CONFIGFILE <arguments>
+python certifier.py CONFIGFILE <arguments>
 ```
 where `CONFIGFILE` is a config file present inside the `configs` folder (or the
 one configured in the `.settings.toml` configuration file), meanwhile `<arguments>`
@@ -39,13 +42,20 @@ can be one of the following:
 |  Arg | Description  |
 |---|---|
 | --random-state RANDOM | Random seed used when partitioning the dataset. |
-| --partition-size SIZE | Maximum number of data points in a partition (default 20). |
+| --partition-size SIZE | Maximum number of data points in a partition (default 100). |
 | --log  {INFO,DEBUG,ERROR}  | Log level used during the verification phase (default ERROR).  |
+| --all-labels  | Compute all labels. (default False)  |
+| --no-parallel | Classify points sequentially.  |
 | -h, --help  | Show help message and exit.  |
 
+For example
+
+```[bash]
+python python certify.py fourclass_5_percent --partition-size 100 --log info
+```
 
 ## Results
-After the verification process is finished the tool will save the results in 4 files:
+After the certification process is finished the tool will save the results in 4 files:
 - **classification.csv**: Contains the classifications results for each value of k.
 - **robustness.csv**: Contains the robustness results for each value of k.
 - **stability.csv**: Contains the stability results for each value of k.
@@ -105,6 +115,9 @@ It has three section:
   - `format`: The format of the dataset which can be *libsvm* or *csv*.
   - `training_set`: The name of the file that contains the training data
   - `test_set`:  The name of the file that contains the test data
+  - `category_indexes`: The indexes (zero-based) corresponding to categorical features in the input
+  - `numerical_features`: The indexes (zero-based) corresponding to numerical features in the input (if missing then all features are considered numerical)
+  - `perturb_categories`: The index  (zero-based) of the category to perturb for Noise_Cat pertubation
 
 - `abstraction`:
-  - `epsilon`: The perturbation value.
+  - `epsilon`: The perturbation magnitude value.

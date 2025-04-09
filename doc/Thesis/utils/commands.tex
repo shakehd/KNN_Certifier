@@ -1,0 +1,51 @@
+%!TEX root = ../dissertation.tex
+
+% Commands
+
+\theoremstyle{italicstyle}
+\newtheorem{theorem}{Theorem}[chapter]
+
+\theoremstyle{normalstyle}
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{note}{Note}[chapter]
+\newtheorem{example}{Example}[chapter]
+\newtheorem{illustrativeexample}{Illustrative Example}
+\newtheorem{proposition}{Proposition}[chapter]
+
+\DeclareMathOperator{\sign}{\textit{sign}}
+
+\newcommand{\exampleautorefname}{Example}
+\newcommand{\definitionautorefname}{Definition}
+\newcommand{\propositionautorefname}{Proposition}
+
+\newcommand{\algtitle}[1]{\textsc{#1}}
+
+% \renewcommand{\vec}[1]{\mathbf{#1}}
+\renewcommand{\vec}[1]{\bm{#1}}
+\definecolor{mygray}{gray}{0.85}
+\newcolumntype{g}{>{\columncolor{mygray}}c}
+
+\newcommand{\set}[1][S]{\mathcal{#1}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}[1][n]{\mathbb{R}^{#1}}
+\newcommand{\vpath}[1][P]{\mathcal{#1}}
+\newcommand{\vinput}[1][x]{\vec{#1}}
+\newcommand{\x}[1][i]{\vec{x}_{#1}}
+\newcommand{\sample}[1][i]{\vec{s}_{#1}}
+\newcommand{\var}[1]{\mathtt{#1}}
+\newcommand{\PPG}[1][\vinput]{\mathbb{G}_{#1}}
+\newcommand{\APPG}[1][\vinput]{\mathbb{G}^A_{#1}}
+
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+
+\newcommand{\pre}[3][\vec{x}]{#2 \preccurlyeq_{#1} #3}
+\newcommand{\npre}[3][\vec{x}]{#2 \not\preccurlyeq_{#1} #3}
+
+\newcommand{\pred}[1]{\boldsymbol{\mathtt{pred}}(#1)}
+\newcommand{\adj}[1]{\boldsymbol{\mathtt{adj}}(#1)}
+\newcommand{\samedist}[1]{\boldsymbol{\mathtt{same\_dist}}(#1)}
+
+\newcommand{\pert}[1][\vinput]{P^{\epsilon}(#1)}
+
+\newcommand{\apre}[3][\vec{x}]{#2 \preccurlyeq^A_{#1} #3}
+\newcommand{\napre}[3][\vec{x}]{#2 \not\preccurlyeq^A_{#1} #3}

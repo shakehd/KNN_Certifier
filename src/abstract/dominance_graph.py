@@ -3,11 +3,10 @@ import logging
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from heapq import heapify, heappop, heappush
-from typing import Optional, Self, Type
+from typing import Iterable, Optional, Self, Type
 from pprint import pformat
 from textwrap import indent
-from itertools import repeat, chain
+from itertools import chain, combinations
 from functools import reduce
 from math import ceil
 import numpy as np
@@ -52,7 +51,7 @@ class Vertex:
 
 @dataclass(order=True)
 class PrioritizedItem:
-    priority: tuple[int, int]
+    priority: tuple[int, int] | tuple[int, int, int]
     item: Path =field(compare=False)
 
 class Safe_Vertex_Error(Enum):
@@ -63,15 +62,12 @@ class Safe_Vertex_Error(Enum):
 
 @dataclass
 class Path:
-  vertices: list[VertexId] = field(default_factory=list)
-  polyhedron: Polyhedron = field(default_factory=Polyhedron.perturbation)
+  vertices: frozenset[VertexId] = field(default_factory=frozenset)
+  voronoi_cell: Polyhedron = field(default_factory=Polyhedron.perturbation)
   label_occurrences: Counter[int] = field(default_factory=Counter)
   max_length: int = field(default_factory=int)
   min_length: int = field(default=1)
-
-  @property
-  def last(self: Self) -> VertexId:
-    return self.vertices[-1]
+  max_label_occur: int = field(default_factory=int)
 
   @property
   def most_common_label(self: Self) -> tuple[int, int]:
@@ -90,51 +86,38 @@ class Path:
   def is_safe(self: Self, vertex: Vertex,
               dom_graph : DominanceGraph) -> tuple[Safe_Vertex_Error, None | Polyhedron]:
 
-    def build_new_polyhedrons() -> Polyhedron:
-      not_ancestor = set(self.vertices) - vertex.closer_vertices
+    def build_voronoi_cell() -> Polyhedron:
 
       inequalities_lhs: list[Array1xN] = []
       inequalities_rhs: list[float] = []
 
-      equidistant_vertices: set[VertexId] = \
-            vertex.equidistant_vertices - set(self.vertices)
+      all_equidistant_vertices: list[VertexId] = list(reduce(
+        (lambda acc, v: acc.union(dom_graph[v].equidistant_vertices)), # type: ignore
+        self.vertices | set([vertex.id]),
+        set())) # type: ignore
 
-      equidistant_vertices = set(
-        [v_id for v_id in equidistant_vertices
-         if len(dom_graph[v_id].closer_vertices) <= self.len()
-        ]
-      )
-
-      if not not_ancestor and not equidistant_vertices:
-        return self.polyhedron.copy()
+      if not all_equidistant_vertices:
+        return self.voronoi_cell.copy()
 
       bisectors = dom_graph.bisectors
-      if equidistant_vertices:
-        for v in equidistant_vertices:
-          if (vertex.id, v) in bisectors:
-            bisector = bisectors[(vertex.id, v)]
-            inequalities_lhs.append(bisector.coefficients)
-            inequalities_rhs.append(bisector.constant)
-          else:
-            bisector = bisectors[(v, vertex.id)]
-            inequalities_lhs.append(-bisector.coefficients)
-            inequalities_rhs.append(-bisector.constant)
+      path_vertices_ids = self.vertices | set([vertex.id])
+      if all_equidistant_vertices:
+        for path_vertex_id in path_vertices_ids:
 
-      if not_ancestor:
-        for v in not_ancestor:
-          if (v, vertex.id) in bisectors:
-            bisector = bisectors[(v, vertex.id)]
-            inequalities_lhs.append(bisector.coefficients)
-            inequalities_rhs.append(bisector.constant)
-          else:
-            bisector = bisectors[(vertex.id, v)]
-            inequalities_lhs.append(-bisector.coefficients)
-            inequalities_rhs.append(-bisector.constant)
+          for other_vertex_id in [ _.id for _ in dom_graph.get_vertices() if _.id not in path_vertices_ids]:
+            if (path_vertex_id, other_vertex_id) in bisectors:
+              bisector = bisectors[(path_vertex_id, other_vertex_id)]
+              inequalities_lhs.append(bisector.coefficients)
+              inequalities_rhs.append(bisector.constant)
+            else:
+              bisector = bisectors[(other_vertex_id, path_vertex_id)]
+              inequalities_lhs.append(-bisector.coefficients)
+              inequalities_rhs.append(-bisector.constant)
 
-      return self.polyhedron.refine(inequalities_lhs, inequalities_rhs) # type: ignore
+      return Polyhedron(np.array(inequalities_lhs), np.array(inequalities_rhs)) # type: ignore
 
     missing_ancestor: bool = bool(vertex.closer_vertices) and \
-                                  (not vertex.closer_vertices <= set(self.vertices))
+                                  (not vertex.closer_vertices <= self.vertices)
     circular_path: bool = vertex.id in self.vertices
 
     if missing_ancestor:
@@ -143,7 +126,7 @@ class Path:
     if circular_path:
       return Safe_Vertex_Error.CIRCULAR_PATH, None
 
-    new_polyhedron = build_new_polyhedrons()
+    new_polyhedron = build_voronoi_cell()
 
     if not new_polyhedron.is_valid():
       return Safe_Vertex_Error.UNSATISFIED_LP, None
@@ -160,11 +143,12 @@ class Path:
 
     assert polyhedron is not None
     return Path(
-      self.vertices + [vertex.id],
+      self.vertices | set([vertex.id]),
       polyhedron,
       self.label_occurrences + Counter([vertex.label]),
       self.max_length,
-      self.min_length
+      self.min_length,
+      self.max_label_occur
     )
 
   def __len__(self: Self) -> int:
@@ -180,39 +164,46 @@ class Path:
   def __str__(self) -> str:
     return '[' + ', '.join(self.vertices) + ']'
 
+  @classmethod
+  def emptyPath(cls:  type[Path], max_length: int=0,max_label_occur:int=0) -> Path:
+    return cls(max_length = max_length, max_label_occur = max_label_occur)
 
   @classmethod
-  def emptyPath(cls:  type[Path], max_length: int=0) -> Path:
-    return cls(max_length=max_length)
-  @classmethod
-  def singlePath(cls:  type[Path], vertexId: VertexId) -> Path:
-    return cls([vertexId])
+  def exist_valid_path(cls:  type[Path], vertices: set[VertexId] | frozenset[VertexId],  dom_graph : DominanceGraph) -> bool:
 
-  @classmethod
-  def check_path(cls: type[Path],
-                 init_path: Path,
-                 vertices: list[VertexId],
-                 bisectors: dict[tuple[VertexId, VertexId], Hyperplane],
-                 dom_graph : DominanceGraph,
-      ) -> list[bool]:
+    all_predecessor: set[VertexId] = set(reduce(
+      (lambda acc, val: acc.union(dom_graph[val].closer_vertices)),  # type: ignore
+      vertices,
+      set()))# type: ignore# type: ignore
 
-    curr_path: Path = init_path
-    valid_lengths = list(repeat(False, len(vertices)))
-    for ix, vx in enumerate(vertices):
-      res = curr_path.add_vertex(dom_graph[vx], dom_graph)
 
-      if isinstance(res, Path):
-        valid_lengths[ix] = True
-        curr_path = res
-      else:
-        break
+    if not vertices >= all_predecessor:
+      return False
 
-    return valid_lengths
+    inequalities_lhs: list[Array1xN] = []
+    inequalities_rhs: list[float] = []
+
+    bisectors = dom_graph.bisectors
+    for vertex_id in vertices:
+      other_vertices_id = (_.id for _ in dom_graph.get_vertices() if _.id not in vertices)
+      for other_vertex_id in other_vertices_id:
+        if (vertex_id, other_vertex_id) in bisectors:
+          bisector = bisectors[(vertex_id, other_vertex_id)]
+          inequalities_lhs.append(bisector.coefficients)
+          inequalities_rhs.append(bisector.constant)
+        else:
+          bisector = bisectors[(other_vertex_id, vertex_id)]
+          inequalities_lhs.append(-bisector.coefficients)
+          inequalities_rhs.append(-bisector.constant)
+
+    return Polyhedron(np.array(inequalities_lhs), np.array(inequalities_rhs)).is_valid() # type: ignore
+
 
 @dataclass
 class DominanceGraph:
   vertices: dict[VertexId, Vertex]
   bisectors: dict[tuple[VertexId, VertexId], Hyperplane]
+  adv_region: AdvRegion
   vertices_ids: set[VertexId] = field(init=False, default_factory=set)
 
   def __post_init__(self: Self) -> None:
@@ -269,14 +260,13 @@ class DominanceGraph:
 
     return labels_vertices
 
-  def _approx_max_path_length(self: Self, vertices: list[Vertex], max_length: int,
-                              vertices_with_same_labels: dict[Label, list[Vertex]],
-                              init_path: Path | None = None) -> int:
+  def _approx_max_path_length(self: Self, label: Label, max_length: int,
+                              vertices_with_same_labels: dict[Label, list[Vertex]]
+                             ) -> tuple[int, int]:
 
-      label: Label = vertices[0].label
-      vertex_added: int = 0
+      vertices = list(vertices_with_same_labels.values())
       all_vertices: set[VertexId] = list(reduce((lambda acc, val: acc.union(val.closer_vertices | set([val.id]))), # type: ignore
-                                            vertices, set())) # type: ignore
+                                            chain(*vertices), set())) # type: ignore
       sorted_vertices: list[int] = np.array(list(sorted([int(v) for v in all_vertices]))) # type: ignore
       vertex_ids: dict[int, int] = dict((v, idx) for idx, v in enumerate(sorted_vertices))
 
@@ -284,7 +274,7 @@ class DominanceGraph:
 
       constraints: list[optimize.LinearConstraint] = []
       sizes: NDVector = np.full_like(sorted_vertices, 1)
-      values: NDVector = np.full_like(sorted_vertices, 0)
+      values: NDVector = np.full_like(sorted_vertices, 1)
 
       other_label_constraint: NDVector = np.full_like(sorted_vertices, 0)
       for idx, vertex_id in enumerate(sorted_vertices):
@@ -292,12 +282,7 @@ class DominanceGraph:
 
         if vertex.label == label:
 
-          values[idx] = 1
-
-        else:
-
-          other_label_constraint[idx] = 1
-
+          values[idx] = 2
 
         if len(vertex.closer_vertices) > 0:
           for closer_id in vertex.closer_vertices:
@@ -316,46 +301,45 @@ class DominanceGraph:
 
           constraints.append(optimize.LinearConstraint(A=other_label_constraint, lb=0, ub=len(label_vertices_ids)))
 
-      if init_path is not None:
-        constraint: NDVector = np.full_like(sorted_vertices, 0)
-        constraint[[vertex_ids[int(vid)] for vid in init_path.vertices]] = 1
-        constraints.append(optimize.LinearConstraint(A=constraint, lb=0, ub=len(init_path)))
-
       bounds = optimize.Bounds(0, 1)
       integrality = np.full_like(sorted_vertices, True)
       capacity: int = max_length
       constraints.append(optimize.LinearConstraint(A=sizes, lb=0, ub=capacity))
 
       solution: optimize.OptimizeResult = optimize.milp(c=-values, constraints=constraints,\
-                               integrality=integrality, bounds=bounds) # type: ignore
+                               integrality=integrality, bounds=bounds)
 
-      vertex_added: int = values[solution.x != 0].sum() # type: ignore
+      if solution.success and solution.x is not None:
 
-      if vertex_added != 0:
+        vertex_solution = np.nonzero(solution.x)[0]
+        label_vertex_added = len([_ for _ in vertex_solution if _ in label_vertices_ids])
+        if label_vertex_added != 0:
 
-        return min(sum([
-                min(vertex_added, len(vxs)) for vxs in vertices_with_same_labels.values() # type: ignore
-              ]), max_length)
+          return len(vertex_solution), label_vertex_added
 
-      return 0
+      return 0, 0
 
-  def get_neighbors_label(self: Self, k_vals: list[int]) -> dict[int, set[int]]:
+  def _get_label_vertices(self: Self, label: Label, vertices: Iterable[VertexId]) -> list[Vertex]:
+    return [self[_] for _ in vertices if self[_].label == label]
+
+  def get_neighbors_label(self: Self, k_vals: list[int], all_labels: bool = True) -> dict[int, set[int]]:
 
     max_k: int = max(k_vals)
-    classifications: dict[int, set[int]] = defaultdict(set)
+    classifications: dict[int, set[int]] = dict((k, set()) for k in k_vals)
 
     vertices_with_same_labels: dict[Label, list[Vertex]] = self._get_vertices_with_same_labels()
-    max_approx_lengths: dict[Label, int] = dict([
-      (label, self._approx_max_path_length(vertices_with_same_labels[label], max_k, vertices_with_same_labels))
-      for label in vertices_with_same_labels
+    approx_upper_bounds: dict[Label, tuple[int, int]] = dict([
+      (label, self._approx_max_path_length(label, max_k, vertices_with_same_labels)) for label in vertices_with_same_labels
     ])
-    labels_to_exclude: set[Label] = set([label for label, val in max_approx_lengths.items() if val == 0])
+
+    labels_to_exclude: set[Label] = set([label for label, val in approx_upper_bounds.items() if val[0] == 0])
     possible_labels_with_vertices: dict[Label, list[Vertex]] = vertices_with_same_labels
+    labels = [l for l in vertices_with_same_labels if l not in labels_to_exclude]
 
     if len(possible_labels_with_vertices) == 1:
 
-      for k in k_vals:
-        classifications[k].add(self.vertices['0'].label)
+      for label_occur in k_vals:
+        classifications[label_occur].add(self.vertices['0'].label)
 
       return classifications
 
@@ -365,37 +349,58 @@ class DominanceGraph:
 
     vertices = sorted(vertices, key=lambda val: len(val.closer_vertices))
 
-    k_classified_with: dict[int, list[bool]] = dict([
-      (label, list(repeat(False, max_k))) for label in possible_labels_with_vertices
-    ])
+    def get_possible_vertices(label: Label, label_counter: Counter[Label],
+                              existing_vertices: set[VertexId],
+                              other_vertices: list[Vertex],
+                              max_length: int) -> list[VertexId]:
 
-    def get_possible_vertices(path: Path, max_length: int,
-                              label_vertices: list[Vertex],
-                              other_vertices: list[Vertex]) -> list[Vertex]:
-
-
-      possible_vertices: list[Vertex] = []
-      label_vertices_count = len(label_vertices)
-      for vertex in other_vertices:
-        if vertex.id not in path.vertices and not ignore_vertex(path, vertex, label_vertices_count, max_length):
-
-          possible_vertices.append(vertex)
-
-      label_vertices_to_include = vertex_to_include(path, label_vertices, possible_vertices)
-      possible_vertices.extend(label_vertices_to_include)
+      possible_vertices = [v.id for v in other_vertices
+                                if label_counter[v.label] < label_counter[label]
+                                  and v.id not in existing_vertices
+                                  and not ignore_vertex(label, label_counter[label], existing_vertices, v, max_length,  max_length - label_counter[label],)
+                          ]
 
       return possible_vertices
 
+    def ignore_vertex(label: Label, label_count: int,
+                      existing_vertices: set[VertexId],
+                      vertex: Vertex,
+                      max_path_length: int, max_other_labels: int) -> bool:
 
-    def approx_max_path_length(label: Label, path: Path, vertices: list[Vertex]) -> int:
+      all_vertices: set[VertexId] = existing_vertices | vertex.closer_vertices
+
+      if len(all_vertices) > max_path_length:
+        return True
+
+      # other_missing_vertices = vertex.closer_vertices - existing_vertices
+      # if len([_ for _ in other_missing_vertices if self[_].label != label]) > max_other_labels:
+      #   return True
+
+
+      lb_count = Counter(self[v].label for v in all_vertices)
+      lb_count.update([vertex.label])
+      most_common = lb_count.most_common(1)[0]
+
+      insufficient_vertex: bool = most_common[1] - lb_count[label] > \
+                            label_count - lb_count[label]
+
+      insufficient_length = most_common[1] - lb_count[label] > \
+                            max_path_length - (len(vertex.closer_vertices)+1)
+
+
+      if insufficient_vertex or insufficient_length:
+        return True
+
+      return False
+
+    def exists_path(label: Label, vertices: list[Vertex], max_length: int) -> tuple[bool, int]:
 
       all_vertices: set[VertexId] = set(reduce((lambda acc, val: acc.union(val.closer_vertices | set([val.id]))), # type: ignore
                                             vertices, set())) # type: ignore
-      sorted_vertices: list[int] = list(sorted([int(v) for v in all_vertices | set(path.vertices)]))
+      sorted_vertices: list[int] = list(sorted([int(v) for v in all_vertices]))
       vertex_ids: dict[int, int] = dict((v, idx) for idx, v in enumerate(sorted_vertices))
 
       label_vertices_ids = [vertex_ids[vid] for vid in sorted_vertices if self[str(vid)].label == label]
-      path_vertex_ids = [vertex_ids[int(vid)] for vid in path.vertices]
 
       constraints: list[optimize.LinearConstraint] = []
       sizes: NDVector = np.full_like(sorted_vertices, 1)
@@ -404,16 +409,15 @@ class DominanceGraph:
       for idx, vertex_id in enumerate(sorted_vertices):
         vertex: Vertex = self[str(vertex_id)]
 
+        if vertex.label == label:
+          values[idx] = 2
+
         if len(vertex.closer_vertices) > 0:
           for closer_id in vertex.closer_vertices:
             constraint: NDVector = np.full_like(sorted_vertices, 0)
             constraint[vertex_ids[int(closer_id)]] = 1
             constraint[idx] = -1
             constraints.append(optimize.LinearConstraint(A=constraint, lb=0, ub=1))
-
-      constraint: NDVector = np.full_like(sorted_vertices, 0)
-      constraint[path_vertex_ids] = 1
-      constraints.append(optimize.LinearConstraint(A=constraint, lb=len(path), ub=len(path)))
 
       for other_label in possible_labels_with_vertices:
         constraint: NDVector = np.full_like(sorted_vertices, 0)
@@ -423,399 +427,110 @@ class DominanceGraph:
                                                   if int(v.id) in vertex_ids]] = -1
           constraints.append(optimize.LinearConstraint(A=constraint, lb=0, ub=len(label_vertices_ids)))
 
-      constraint: NDVector = np.full_like(sorted_vertices, 1)
-      constraint[label_vertices_ids] = 0
-      constraint[path_vertex_ids] = 0
-      constraints.append(optimize.LinearConstraint(A=constraint, lb=1, ub=np.inf))
-
       bounds = optimize.Bounds(0, 1)
       integrality = np.full_like(sorted_vertices, True)
-      capacity: int = max_k
-      constraints.append(optimize.LinearConstraint(A=sizes, lb=0, ub=capacity))
+      capacity: int = max_length
+      # constraints.append(optimize.LinearConstraint(A=sizes, lb=1, ub=capacity))
+      constraints.append(optimize.LinearConstraint(A=sizes, lb=capacity, ub=capacity))
 
       solution = optimize.milp(c=-values, constraints=constraints,\
                               integrality=integrality, bounds=bounds)
 
-      if solution.success:
-        sol = [vid for vid in sorted_vertices if solution.x[vertex_ids[int(vid)]] != 0]
+      if solution.success and solution.x is not None:
 
-        return len(sol)
-      else:
-        return len(path)
+        vertex_solution = np.nonzero(solution.x)[0]
+        label_vertex_added = len([_ for _ in vertex_solution if _ in label_vertices_ids])
 
-    def vertex_to_include(init_path: Path, label_vertices: list[Vertex],
-                          other_vertices: list[Vertex]) -> list[Vertex]:
-      vertex_to_include: list[Vertex] = []
+        return label_vertex_added != 0,label_vertex_added
 
-      label = label_vertices[0].label
-      max_length = max_approx_lengths[label]
-      bisectors = self.bisectors
+      return False, 0
 
-      for vertex in label_vertices:
+    for label in labels:
 
-        vertex_cp: Vertex = vertex.copy()
+      # print(f'Classifying label {label}')
 
-        to_include: bool = True
+      if not all_labels and all([len(val) > 1 for val in classifications.values()]):
+        break
 
-        if vertex.id not in init_path.vertices and\
-          len(other_vertices) > 0:
 
-            for other_vertex in other_vertices:
-              if ignore_vertex(init_path, vertex_cp, len(label_vertices), max_length):
-                to_include = False
-                break
 
-              if vertex.id != other_vertex.id:
-                inequalities_lhs: list[Array1xN] = []
-                inequalities_rhs: list[float] = []
-                if (vertex.id, other_vertex.id) in bisectors:
-                  bisector = bisectors[(vertex.id, other_vertex.id)]
-                  inequalities_lhs.append(bisector.coefficients)
-                  inequalities_rhs.append(bisector.constant)#
-                else:
-                  bisector = bisectors[(other_vertex.id, vertex.id)]
-                  inequalities_lhs.append(-bisector.coefficients)
-                  inequalities_rhs.append(-bisector.constant)
+      label_vertices = possible_labels_with_vertices[label]
+      max_label_length: int = approx_upper_bounds[label][0]
+      max_label_occur: int = approx_upper_bounds[label][1]
 
-                if not init_path.polyhedron.refine(inequalities_lhs, inequalities_rhs).is_valid(): # type: ignore
-                  vertex_cp.add_to_closer(other_vertex.id)
+      other_vertices: list[Vertex] = list(chain(*[vertices for l, vertices in possible_labels_with_vertices.items()
+                                                           if l != label]))
 
-        else:
-          to_include = False
 
-        if to_include:
-          vertex_to_include.append(vertex_cp)
+      for max_length in (k for k in range(1, max_k+1)):
 
-      return vertex_to_include
 
-    def applied_optimisation_on_length(path: Path,
-                                       priority_queue: list[PrioritizedItem],
-                                       max_length: int) -> tuple[bool, int]:
+        possible_label_vertices = [_ for _ in label_vertices
+                                            if not ignore_vertex(label, max_label_occur, set(), _, max_length, max_label_occur)]
 
-      path_length = len(path)
-      most_commons = path.label_occurrences.most_common(2)
+        exists, max_occur = exists_path(label, possible_label_vertices + other_vertices, max_length)
 
+        if exists:
+          apply_opt2 = False
+          apply_opt3 = False
+          try:
 
-      if len(most_commons) == 1 and label in path.most_common_labels:
+            init: int = min(max_length, max_occur)
+            min_occur: int = ceil(max_length/len(vertices_with_same_labels.keys()))-1
+            labels_occurs: range = range(init, min_occur, -1)
 
-        for k in range(max_k+1):
-          if k in k_vals:
-            k_classified_with[label][k-1] = True
-            classifications[k].add(label)
+            for label_occur in labels_occurs:
 
-        priority_queue = []
-        heapify(priority_queue)
-        return True, 0
+              possible_label_vertices = [_ for _ in label_vertices
+                                            if not ignore_vertex(label, label_occur, set(), _, max_length, max_length - label_occur)]
 
-      else:
+              for label_com in combinations(possible_label_vertices, label_occur):
 
-        if len(most_commons) == 1 or \
-          most_commons[0][1] - most_commons[1][1] >= max_k - path_length:
+                all_vertices: set[VertexId] = set(
+                  reduce(
+                    (lambda acc, val: acc.union(val.closer_vertices) | set([val.id])),  # type: ignore
+                    label_com,  # type: ignore
+                    set()) # type: ignore
+                  )
 
-          for k in range(path_length, max_k+1):
+                label_count = Counter([self[_].label for _ in all_vertices])
 
-            if k in k_vals:
-              k_classified_with[most_commons[0][0]][k-1] = True
-              classifications[k].add(most_commons[0][0])
+                if len(all_vertices) <= max_length\
+                   and label_count[label] <= label_count.most_common(1)[0][1]\
+                   and label_count[label] == label_occur:
 
-          if most_commons[0][0] == label:
-            k_with_missing_label: list[int] = [ix for ix, val in enumerate(k_classified_with[label]) if not val]
+                  if len(all_vertices) == max_length:
+                    if Path.exist_valid_path(set(all_vertices), self):
+                      if label_occur == max_length:
+                        apply_opt3 = max_length >= ceil(max_k/2)
+                      raise StopIteration()
 
-            max_path_length = 0 if not k_with_missing_label else min(k_with_missing_label[-1] + 1, max_length)
-            priority_queue = [item for item in priority_queue if abs(item.priority[1]) <= max_path_length]
+                  if len(all_vertices) < max_length:
 
-            heapify(priority_queue)
-            return True, max_path_length
+                    other_possible_vertices_id = get_possible_vertices(label, label_count, all_vertices, other_vertices, max_length,)
 
-      return False, max_length
+                    if len(other_possible_vertices_id) > 0:
 
-    def ignore_vertex(path: Path, vertex: Vertex, label_count: int,
-                      max_path_length: int) -> bool:
+                      for other_label_com in combinations(other_possible_vertices_id, max_length - len(all_vertices)):
 
-      potential_path = set(path.vertices) | vertex.closer_vertices
+                        final_label_count = label_count + Counter([self[_].label for _ in other_label_com])
 
+                        if final_label_count[label] >= final_label_count.most_common(1)[0][1] and\
+                            Path.exist_valid_path(all_vertices | set([self[_].id for _ in other_label_com]), self):
+                            most_commons = final_label_count.most_common(2)
+                            apply_opt2 = most_commons[0][1] - most_commons[1][1] >= max_k - max_length
+                            raise StopIteration()
 
-      lb_count = Counter(self[v].label for v in potential_path)
-      lb_count.update([vertex.label])
-      most_common = lb_count.most_common(1)[0]
+          except StopIteration:
+            if max_length in k_vals:
+              classifications[max_length].add(label)
 
-      insufficient_vertex: bool = most_common[1] - lb_count[label] > \
-                            label_count - lb_count[label]
+            if apply_opt2 or apply_opt3:
 
-      insufficient_length = most_common[1] - lb_count[label] > \
-                            max_path_length - (len(potential_path)+1)
+              for k in (_ for _ in range(max_length, max_k+1) if _ in k_vals):
+                classifications[k].add(label)
 
-
-      if insufficient_vertex or insufficient_length:
-        return True
-
-      return False
-
-    def extend_path(path: Path, vertex: Vertex,
-                    label: Label, queue: list[PrioritizedItem],
-                    distinct_paths: defaultdict[int, set[tuple[VertexId,...]]]) -> bool:
-
-      path_length: int = len(path)
-      if tuple(path.vertices + [vertex.id]) not in distinct_paths[path_length+1]:
-
-        result = path.add_vertex(vertex, self)
-
-        if result == Safe_Vertex_Error.UNSATISFIED_LP or isinstance(result, Path):
-
-          if isinstance(result, Path):
-
-            labels_priority = -result.label_occurrences[label]
-            item: PrioritizedItem = PrioritizedItem(
-              (labels_priority, -1*len(result)),
-              result
-            )
-            distinct_paths[len(result)].add(tuple(result.vertices))
-            heappush(queue, item)
-            return True
-
-        if result == Safe_Vertex_Error.MISSING_ANCESTOR:
-
-          missing_ancestor =  vertex.closer_vertices - set(path.vertices)
-
-
-          for ancestor in vertex.closer_vertices - set(path.vertices):
-
-            extend_path(path, self[ancestor], label, queue, distinct_paths)
-
-          return False
-
-      return False
-
-    def build_init_paths(vertices: list[Vertex], label: Label,
-                         max_length: int,
-                         distinct_paths: defaultdict[int, set[tuple[VertexId,...]]])  -> list[Path]:
-
-      # init_paths: list[Path] = [Path.emptyPath()]
-      init_paths: list[Path] = []
-
-      priority_queue: list[PrioritizedItem] = []
-      heappush(priority_queue, PrioritizedItem((0, 0), Path.emptyPath()))
-
-      label_count = len(vertices)
-
-      label_vertices = sorted(vertices, key=lambda v: len(v.closer_vertices))
-
-      max_path_length: int = max_length
-      while len(priority_queue):
-
-        queue_item: PrioritizedItem = heappop(priority_queue)
-        path: Path = queue_item.item
-        path_length: int = len(path)
-
-        # print(f'Building path {path}')
-
-        if all(k_classified_with[label][:max_path_length]):
-          return []
-
-        if path_length > 0:
-          vertex = self[path.last]
-          if len(vertex.closer_vertices) > 0 and path.label_occurrences[label] == 1:
-            labels_count: Counter[int] = Counter([self[v].label for v in vertex.closer_vertices])
-            most_commons = labels_count.most_common(2)
-            if most_commons[0][0] != label:
-              path.min_length = 2*most_commons[0][1]
-            elif len(most_commons) > 1:
-              path.min_length = 2*most_commons[1][1]
-
-          if all(k_classified_with[label][path_length-1:]) or\
-            all(k_classified_with[label][path.min_length-1:]):
-            continue
-
-          if path_length >= ceil(max_k/2):
-
-            applied, path_max_length = applied_optimisation_on_length(path, priority_queue, max_path_length)
-            max_path_length = path_max_length
-            if applied:
-                continue
-
-          if path_length > 0:
-
-            most_commons = path.label_occurrences.most_common(2)
-            if len(most_commons) == 1 and most_commons[0][0] == label:
-
-              for k in range(path_length+1):
-                if k in k_vals:
-                  k_classified_with[label][k-1] = True
-                  classifications[k].add(label)
-
-            else:
-
-              most_common_labels = path.most_common_labels
-
-              if path_length in k_vals and label in most_common_labels:
-                k_classified_with[label][path_length-1] = True
-                classifications[path_length].add(label)
-
-              if path_length == max_path_length:
-
-                k_with_missing_label: list[int] = [ix for ix, val in enumerate(k_classified_with[label])
-                                                      if not val]
-                max_path_length = 0 if not k_with_missing_label else min(k_with_missing_label[-1] + 1, max_length)
-                priority_queue = [item for item in priority_queue if abs(item.priority[1]) <= max_path_length]
-
-                heapify(priority_queue)
-
-                continue
-
-
-          if all(k_classified_with[label][:max_path_length]):
-            return []
-
-        path_extended: bool = False
-        if path_length <= max_path_length:
-
-          for vertex in filter(lambda v: v.id not in path.vertices, label_vertices):
-
-            # if not ignore_vertex(path, vertex, label_count, max_length):
-
-              path_extended |= extend_path(path, vertex, label, priority_queue, distinct_paths)
-
-        if not path_extended and 0 < path_length <= max_path_length\
-           and path.most_common_label[1] <= path.label_occurrences[label]\
-           and path not in init_paths:          #  and self[path.vertices[-1]].label == label\
-
-            init_paths.append(path)
-
-      return init_paths
-
-    def extend_init_path(label: Label, init_path: Path, possible_vertices: list[Vertex],
-                         max_length: int,
-                         distinct_paths: defaultdict[int, set[tuple[VertexId,...]]]) -> None:
-
-      init_path_length = len(init_path)
-      max_label_occur = len([_ for _ in possible_vertices if _.label == label]) + init_path.label_occurrences[label]
-      max_path_length = max_length
-
-      priority_queue: list[PrioritizedItem] = []
-      heappush(
-        priority_queue,
-        PrioritizedItem((0, -init_path_length), init_path)
-      )
-
-      while len(priority_queue):
-
-        path: Path = heappop(priority_queue).item
-        path_length: int = len(path)
-
-        if path_length > 0:
-          if all(k_classified_with[label][init_path.min_length:]) or\
-            all(k_classified_with[label][path_length-1:]):
-            continue
-
-          if path_length >= ceil(max_k/2):
-            most_commons = path.label_occurrences.most_common(2)
-
-            if len(most_commons) == 1 or \
-              most_commons[0][1] - most_commons[1][1] > max_k - path_length:
-
-              for k in range(path_length, max_k+1):
-
-                if k in k_vals:
-                  k_classified_with[most_commons[0][0]][k-1] = True
-
-              if most_commons[0][0] == label:
-                k_with_missing_label: list[int] = [ix for ix, val in enumerate(k_classified_with[label])
-                                                      if not val]
-                new_max_path_length = 0 if not k_with_missing_label else k_with_missing_label[-1] + 1
-                max_path_length = min(new_max_path_length, max_path_length)
-                priority_queue = [item for item in priority_queue
-                                        if abs(item.priority[1]) <= max_path_length]
-
-                heapify(priority_queue)
-
-              continue
-
-
-          max_freq: int = path.label_occurrences.most_common(1)[0][1] # type: ignore
-          most_freq_labels: list[int] = [k for k,c in path.label_occurrences.items()\
-                                          if c == max_freq]
-
-          if label in most_freq_labels:
-            k_classified_with[label][path_length-1] = True
-
-            if path_length == max_path_length:
-              k_with_missing_label: list[int] = [ix for ix, val in enumerate(k_classified_with[label])
-                                                    if not val]
-              max_path_length = 0 if not k_with_missing_label else min(k_with_missing_label[-1] + 1, max_path_length)
-              priority_queue = [item for item in priority_queue
-                                      if abs(item.priority[1]) <= max_path_length]
-
-              heapify(priority_queue)
-
-          if all(k_classified_with[label][:max_path_length]):
-            break
-
-
-        if path_length == 0 or (path.most_common_label[1] <= max_label_occur and path_length < max_path_length):
-
-          for adj in possible_vertices:
-            if not ignore_vertex(path, adj, max_label_occur, max_length):
-              if adj.label == label:
-                extend_path(path, adj, label, priority_queue, distinct_paths)
-
-              if adj.label != label and \
-                max_label_occur >= path.label_occurrences[adj.label] + 1 and\
-                not all(k_classified_with[label][init_path.min_length-1:max_path_length]):
-
-                extend_path(path, adj, label, priority_queue, distinct_paths)
-
-    for label in possible_labels_with_vertices:
-
-      if label not in labels_to_exclude:
-
-        label_vertices = possible_labels_with_vertices[label]
-        min_path_length = min([len(v.closer_vertices) for v in label_vertices])
-        distinct_paths: defaultdict[int, set[tuple[VertexId,...]]] = defaultdict(set)
-
-        k_classified_with[label][:min_path_length] = list(repeat(True, min_path_length))
-
-        other_vertices: list[Vertex] = list(chain(*[vertices for l, vertices in possible_labels_with_vertices.items()
-                                                                          if l != label]))
-
-        for i in range(max_k):
-          if i+1 not in k_vals:
-            k_classified_with[label][i] = True
-
-        init_paths = build_init_paths(possible_labels_with_vertices[label],
-                                      label, max_approx_lengths[label], distinct_paths)
-
-        if len(init_paths) == 0 or all(k_classified_with[label]):
-          continue
-
-        sorted_paths = list(sorted(init_paths, key=lambda p: len(p.vertices), reverse=True))
-
-        for init_path in sorted_paths:
-
-          possible_vertices = get_possible_vertices(init_path, max_approx_lengths[label], possible_labels_with_vertices[label], other_vertices)
-
-          path_max_length = approx_max_path_length(label, init_path, possible_vertices)
-
-          if len(init_path) > 0:
-            if all(k_classified_with[label][init_path.min_length-1:path_max_length]) or\
-              all(k_classified_with[label][len(init_path)-1:path_max_length]):
-              continue
-
-            path_length = len(init_path)
-            if path_length in k_vals:
-              k_classified_with[label][path_length-1] = True
-
-            if init_path.most_common_label[1] == path_length:
-              for k in range(1, path_length+1):
-                if k in k_vals:
-                  k_classified_with[label][k-1] = True
-
-
-          extend_init_path(label, init_path, possible_vertices, path_max_length, distinct_paths)
-
-        for k in range(min_path_length+1,max_k +1):
-
-          if k in k_vals and k_classified_with[label][k-1]:
-            classifications[k].add(label)
+              break
 
     return classifications
 
@@ -883,4 +598,4 @@ class DominanceGraph:
 
     logger.debug("\t dominance graph: \n")
     logger.debug('%s\n', indent(pformat(dom_matrix, compact=True),'\t\t'))
-    return cls(dom_matrix, bisectors)
+    return cls(dom_matrix, bisectors, adv_region)

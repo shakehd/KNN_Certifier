@@ -1,0 +1,14 @@
+[knn_params]
+k_values = [1, 2, 3, 5, 7]
+distance_metric = "euclidean"
+
+[dataset]
+format = "csv"
+training_set = "crime.csv"
+test_set = "crime.t.csv"
+category_indexes = [0]
+perturb_categories = [0]
+
+[abstraction]
+epsilon = 0.002
+

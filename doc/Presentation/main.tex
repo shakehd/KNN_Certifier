@@ -1,0 +1,190 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Beamer Presentation - LaTeX Template
+% Version 2.0 (March 8, 2022)
+% Original Template: https://www.LaTeXTemplates.com
+% Author: Vel (vel@latextemplates.com)
+% License: CC BY-NC-SA 4.0
+
+% Este modelo de apresentação foi
+% criado a partir do modelo de Giovanni Spadaro.
+% Disponível em: https://github.com/Giovo17/presentation-template-unict-lm-data
+%
+% Adaptado por Lucas Amaral Taylor para criar uma versão especial
+% para os alunos de Matemática e Estatística da USP (IME-USP).
+% Disponível em: https://github.com/lucasamtaylor01/IME-template
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+% CLASSE DO DOCUMENTO E CONFIGURAÇÕES BÁSICAS
+%----------------------------------------------------------------------------------------
+\documentclass[
+    % 11pt,
+    presentation,               % Tamanho padrão da fonte
+    % t,                % Alinhar verticalmente ao topo
+    % aspectratio=169,   % Definir proporção 16:9
+]{beamer}
+\graphicspath{{img/}}         % Define o diretório das imagens
+
+%----------------------------------------------------------------------------------------
+% PACOTES NECESSÁRIOS
+%----------------------------------------------------------------------------------------
+\usepackage{
+    booktabs,     % Melhora a aparência das linhas em tabelas
+    palatino,     % Define Palatino como fonte principal
+    subcaption    % Suporte para subfiguras
+}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{animate}
+\usepackage{rotating}
+\usepackage{bm}
+\usepackage[normalem]{ulem}
+\usepackage[T1]{fontenc} % Define Open Sans como fonte secundária
+\usepackage[utf8]{inputenc}
+\usepackage[font={small,it}]{caption}
+\usepackage{tabulary}
+\usepackage{tabularx}
+\usepackage{color}
+\usepackage{colortbl}
+\usepackage{multirow}
+\usepackage{tikz}
+\usepackage{appendixnumberbeamer}
+\usetikzlibrary{shadows}
+\usetikzlibrary{patterns,intersections, positioning, decorations.markings}
+\usetikzlibrary{patterns,decorations.pathreplacing,backgrounds,calc}
+\usepackage{pgfplots}
+\usepgfplotslibrary{fillbetween}
+\input{config/code_langs}       % Importa configurações para highlight de código
+
+%----------------------------------------------------------------------------------------
+% CONFIGURAÇÃO DO TEMA
+%----------------------------------------------------------------------------------------
+% Tema Base
+\usetheme{CambridgeUS}                          % Define o tema principal
+% \usetheme{Boadilla}                          % Define o tema principal
+\useinnertheme{circles}                       % Tema interno com círculos
+\useoutertheme[subsection=false]{miniframes}                   % Tema externo com miniframes
+\setbeamertemplate{navigation symbols}{}     % Remove símbolos de navegação
+
+% % Cores Personalizadas
+\definecolor{primaryColor}{RGB}{157, 0, 0}   % Cor primária - azul escuro
+\definecolor{secondaryColor}{RGB}{80, 0, 10} % Cor secundária - azul médio
+\renewcommand{\vec}[1]{\bm{#1}}
+\newcommand{\vinput}[1][x]{\vec{#1}}
+\newcommand{\sample}[1][i]{\vec{s}_{#1}}
+\newcommand{\adj}[1]{\boldsymbol{\mathtt{adj}}(#1)}
+\newcommand{\rulesep}{\unskip\ \vrule\ }
+\tikzset{
+  invisible/.style={opacity=0},
+  visible on/.style={alt={#1{}{invisible}}},
+  alt/.code args={<#1>#2#3}{%
+    \alt<#1>{\pgfkeysalso{#2}}{\pgfkeysalso{#3}} % \pgfkeysalso doesn't change the path
+  },
+}
+
+\definecolor{mygray}{gray}{0.85}
+\newcolumntype{g}{>{\columncolor{mygray}}c}
+
+% % Configurações de Cores
+% \setbeamertemplate{itemize item}{\color{primaryColor}}
+\setbeamercolor{structure}{fg=primaryColor}
+% \setbeamercolor{palette primary}{bg=primaryColor, fg=white}
+% \setbeamercolor{palette secondary}{bg=secondaryColor, fg=white}
+\setbeamercolor{title}{bg=primaryColor, fg=white}
+\setbeamertemplate{caption}{\raggedright\insertcaption\par}
+% % Cores do Cabeçalho e Rodapé
+\setbeamercolor{headline}{bg=secondaryColor, fg=white}
+% \setbeamercolor{section in head/foot}{bg=primaryColor, fg=white}
+% \setbeamercolor{subsection in head/foot}{bg=secondaryColor, fg=white}
+% \setbeamercolor{author in head/foot}{bg=primaryColor, fg=white}
+% \setbeamercolor{title in head/foot}{bg=secondaryColor, fg=white}
+% \setbeamercolor{date in head/foot}{bg=primaryColor, fg=white}
+% \setbeamercolor{page number in head/foot}{bg=primaryColor, fg=white}
+\setbeamerfont{caption}{size=\scriptsize}
+%----------------------------------------------------------------------------------------
+% BIBLIOGRAFIA
+%----------------------------------------------------------------------------------------
+\usepackage[style=alphabetic,backend=biber]{biblatex}
+\addbibresource{bibliografia.bib}
+
+%----------------------------------------------------------------------------------------
+% INFORMAÇÕES DA APRESENTAÇÃO
+%----------------------------------------------------------------------------------------
+\title[$k$-NN Robustness Certification]{Exact Robustness Certification of $k$-Nearest Neighbor Classifiers}          % [Versão curta]{Versão completa}
+\author{Ahmad Shakeel}            % [Versão curta]{Nome completo}
+\institute[Univ. di Padova]{Master Degree in Computer Science \mbox{}\\ \mbox{}\\ Università degli Studi di Padova}
+\date{10 Apr 2025}
+\logo{
+\includegraphics[scale=0.5, width=1cm]{img/unipd_logo}
+}
+
+%----------------------------------------------------------------------------------------
+% INÍCIO DO DOCUMENTO
+%----------------------------------------------------------------------------------------
+\begin{document}
+
+% Slide de título com logo
+% \setbeamertemplate{headline}{}
+% \setbeamertemplate{footline}{}
+% \begin{frame}
+%     \titlepage
+%     \begin{figure}
+%         \includegraphics[width=0.45\linewidth]{img/logo_IME.png}
+%     \end{figure}
+% \end{frame}
+
+{
+\defbeamertemplate*{headline}{mytheme}
+{%
+  \begin{beamercolorbox}[colsep=1.5pt]{upper separation line head}
+  \end{beamercolorbox}
+  \begin{beamercolorbox}{section in head/foot}
+    \vskip2pt\phantom{\insertnavigation{\paperwidth}}\vskip2pt
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[colsep=1.5pt]{lower separation line head}
+  \end{beamercolorbox}
+}
+  \setbeamertemplate{logo}{}
+    \begin{frame}
+        \titlepage
+        \begin{figure}
+            \includegraphics[width=0.30\linewidth]{img/unipd_logo}
+        \end{figure}
+    \end{frame}
+}
+
+\begin{frame}{Outline}
+    \tableofcontents
+\end{frame}
+
+\include{sections/introduction}
+\include{sections/approach}
+\include{sections/results}
+\include{sections/conclusion}
+
+
+\begin{frame}
+  \centering
+  \centering \Large \emph{Thanks for listening !!}
+\end{frame}
+
+\include{sections/backup}
+
+% \include{sections/section02}
+% \include{sections/section03}
+
+% % Slide final
+% \begin{frame}
+%     \begin{center}
+%         {\Huge Fim da apresentação!}
+%     \end{center}
+% \end{frame}
+
+\end{document}
+
+

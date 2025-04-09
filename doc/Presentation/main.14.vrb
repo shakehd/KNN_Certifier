@@ -1,0 +1,47 @@
+\frametitle{Graph Construction}
+\begin{figure}[h]
+        \centering
+        \begin{tikzpicture}[>=latex, scale=0.9]
+            \centering
+            \begin{axis}[
+                xmin = 0, xmax = 2,
+                ymin = 0, ymax = 2,
+                xtick distance = 1,
+                ytick distance = 1,
+                grid = both,
+                minor tick num = 10,
+                major grid style = {lightgray},
+                minor grid style = {lightgray!75},
+                width = 8cm,
+                height = 8cm,
+                axis x line=center,
+                axis y line=center,
+                xlabel = {$x$},
+                ylabel = {$y$},
+                xlabel style={above left},
+                ylabel style={below right}]
+
+                    % draws point
+                    \node [green, mark=*](x_2) at (1cm,1.8cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x_2]{ $\scriptscriptstyle \sample[2]$};
+                    \node [green](x_1) at (2cm,1.6cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x_1]{$\scriptscriptstyle \sample[1]$};
+                    \node [blue](x_3) at (3cm,1.8cm) {$\bullet$};
+                    \node [below right = -0.25cm and -0.50cm of x_3]{$\scriptscriptstyle \sample[3]$};
+                    \node [blue](x_4) at (3.2cm,1.8cm) {$\bullet$};
+                    \node [below right = -0.60cm and -0.32cm of x_4]{$\scriptscriptstyle \sample[4]$};
+                    \node [blue](x_5) at (3cm,3.4cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x_5]{$\scriptscriptstyle \sample[5]$};
+
+                    \draw[fill=green, draw=green!50,semitransparent, visible on=<1>] (1.75cm,1.75cm) rectangle (2.1cm,2.25cm);
+                    \draw[fill=blue, draw=blue!50,semitransparent, visible on=<2>] (2.1cm,1.75cm) rectangle (2.25cm,2.25cm);
+                    % \draw[fill=blue, draw=blue!50,semitransparent, visible on=<3>] (1.75cm,1.75cm) rectangle (2.1cm,2.25cm);
+
+
+                    \draw[fill=gray!50, draw=gray!50,semitransparent] (1.75cm,1.75cm) rectangle (2.25cm,2.25cm);
+                    \node [red](x) at (2cm,2cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x]{$\scriptscriptstyle \vinput$};
+
+                    \end{axis}
+        \end{tikzpicture}
+    \end{figure}

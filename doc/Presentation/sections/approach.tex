@@ -1,0 +1,368 @@
+\section{Methodology}
+%----------------------------------------------------------------------------------------
+\begin{frame}[fragile]{Robustness Certification: Basic idea}
+    \begin{itemize}
+        \item The possible perturbations of $x$ create a small $\ell_{\infty}$ ball centered in $x$ with radius $\epsilon > 0$:
+            \[
+                P^{\epsilon}(x) = \{x' \in \mathbb{R}^n\ |\ ||x'- x ||_{\infty} \leq \epsilon \}
+            \]x
+        \item $P^{\epsilon}(x)$ is called the \emph{Perturbation (or Adversarial)} region of $x$
+    \end{itemize}
+    \begin{figure}[H]
+        \centering
+        \usetikzlibrary{arrows.meta, intersections}
+        \begin{tikzpicture}[
+            scale=0.7,
+            dot/.style = {circle, draw, fill=#1, inner sep=3pt, node contents={}}
+        ]
+            \begin{axis}[
+                xmin = 0, xmax = 6,
+                ymin = 0, ymax = 6,
+                xtick distance = 1,
+                ytick distance = 1,
+                grid = both,
+                minor tick num = 5,
+                major grid style = {lightgray},
+                minor grid style = {lightgray!25},
+                axis x line=center,
+                axis y line=center,
+                xlabel = {$x$},
+                ylabel = {$y$},
+                xlabel style={above left},
+                ylabel style={below right}
+            ]
+            \node (m) at (3.5cm,3cm) [dot=gray];
+            \draw[fill=gray!70, draw=gray!70,semitransparent] (3cm,2.5cm) rectangle (4cm,3.5cm);
+            \node (l_x) at (3.5cm,3cm) {\textbf{\tiny x}};
+    		\node (p1) at (2.5cm,5cm) [dot=green];
+			\node (p2) at (4cm,4cm) [dot=green];
+			\node (p3) at (5cm,1.5cm) [dot=green];
+			\node (p4) at (1.5cm,4cm) [dot=green];
+			\node (p5) at (1cm,2.5cm) [dot=blue!50];
+			\node (p6) at (4cm,5.5cm) [dot=blue!50];
+			\node (p6) at (5.5cm,4.5cm) [dot=blue!50];
+			\node (p7) at (4cm,0.5cm) [dot=red];
+			\node (p8) at (4.5cm,2.5cm) [dot=red];
+			\node (p9) at (3cm,2cm) [dot=red];
+			\node (p10) at (2.5cm,1cm) [dot=red];
+            \end{axis}
+        \end{tikzpicture}
+    \end{figure}
+\end{frame}
+
+\begin{frame}[fragile]{Robustness Certification: Stability}
+    \begin{itemize}
+        \item Check if exists $x_0 \in P^{\epsilon}(x)$ such that $k\text{-NN}(x) \neq k\text{-NN}(x_0)$
+        \item $x_0$ exists $\Rightarrow $ $k$-NN is \textbf{not stable}  on $x$
+        \item $x_0$ does not exist $\Rightarrow$ $k$-NN is \textbf{stable}  on $x$
+    \end{itemize}
+    \begin{figure}[H]
+        \centering
+        \usetikzlibrary{arrows.meta, intersections}
+        \begin{tikzpicture}[
+            scale=0.75,
+            dot/.style = {circle, draw, fill=#1, inner sep=3pt, node contents={}}
+        ]
+            \begin{axis}[
+                xmin = 0, xmax = 6,
+                ymin = 0, ymax = 6,
+                xtick distance = 1,
+                ytick distance = 1,
+                grid = both,
+                minor tick num = 5,
+                major grid style = {lightgray},
+                minor grid style = {lightgray!25},
+                axis x line=center,
+                axis y line=center,
+                xlabel = {$x$},
+                ylabel = {$y$},
+                xlabel style={above left},
+                ylabel style={below right}
+            ]
+            \node (m) at (3.5cm,3cm) [dot=gray];
+            \draw[fill=gray!70, draw=gray!70,semitransparent] (3cm,2.5cm) rectangle (4cm,3.5cm);
+            \node (l_x) at (3.5cm,3cm) {\textbf{\tiny x}};
+
+            \node (x_0) at (3.7cm,3.3cm) [black] {$\bullet$};
+            \node [below right = -0.32cm and -0.32cm of x_0]{ $\scriptscriptstyle x_0$};
+    		\node (p1) at (2.5cm,5cm) [dot=green];
+			\node (p2) at (4cm,4cm) [dot=green];
+			\node (p3) at (5cm,1.5cm) [dot=green];
+			\node (p4) at (1.5cm,4cm) [dot=green];
+			\node (p5) at (1cm,2.5cm) [dot=blue!50];
+			\node (p6) at (4cm,5.5cm) [dot=blue!50];
+			\node (p6) at (5.5cm,4.5cm) [dot=blue!50];
+			\node (p7) at (4cm,0.5cm) [dot=red];
+			\node (p8) at (4.5cm,2.5cm) [dot=red];
+			\node (p9) at (3cm,2cm) [dot=red];
+			\node (p10) at (2.5cm,1cm) [dot=red];
+            \end{axis}
+        \end{tikzpicture}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Algorithm overview}
+    Given an input samples $x$:
+    \begin{enumerate}
+        \item<2-> Build a directed graph $G$ where
+            \begin{itemize}
+                \item Nodes are samples in the training set;
+                \item Edges model the relation of \textbf{\emph{being-closer}} to the adversarial region of $x$;
+            \end{itemize}
+        \item<3-> For each label $\ell$
+            \begin{itemize}
+                \item Traverse the graph $G$
+                \item Find a \textbf{\emph{valid}} path with $k$ samples where $\ell$ is dominant label;
+            \end{itemize}
+         \item<4-> If more than one dominant label is found
+            \begin{itemize}
+                \item $k$-NN is not stable on $x$;
+                \item otherwise $k$-NN is stable on $x$;
+            \end{itemize}
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}[fragile]{Graph Construction}
+    \begin{figure}[h]
+        \centering
+        \begin{subfigure}{0.5\linewidth}
+            \begin{tikzpicture}[>=latex, scale=0.9]
+                \centering
+                \begin{axis}[
+                    xmin = 0, xmax = 2,
+                    ymin = 0, ymax = 2,
+                    xtick distance = 1,
+                    ytick distance = 1,
+                    grid = both,
+                    minor tick num = 10,
+                    major grid style = {lightgray},
+                    minor grid style = {lightgray!75},
+                    width = 8cm,
+                    height = 8cm,
+                    axis x line=center,
+                    axis y line=center,
+                    xlabel = {$x$},
+                    ylabel = {$y$},
+                    xlabel style={above left},
+                    ylabel style={below right}]
+
+                        % draws point
+                        \node [green, mark=*](x_2) at (1cm,1.8cm) {$\bullet$};
+                        \node [below right = -0.32cm and -0.32cm of x_2]{ $\scriptscriptstyle \sample[2]$};
+                        \node [green](x_1) at (2cm,1.6cm) {$\bullet$};
+                        \node [below right = -0.32cm and -0.32cm of x_1]{$\scriptscriptstyle \sample[1]$};
+                        \node [blue](x_3) at (3cm,1.8cm) {$\bullet$};
+                        \node [below right = -0.25cm and -0.50cm of x_3]{$\scriptscriptstyle \sample[3]$};
+                        \node [blue](x_4) at (3.2cm,1.8cm) {$\bullet$};
+                        \node [below right = -0.60cm and -0.32cm of x_4]{$\scriptscriptstyle \sample[4]$};
+                        \node [blue](x_5) at (3cm,3.4cm) {$\bullet$};
+                        \node [below right = -0.32cm and -0.32cm of x_5]{$\scriptscriptstyle \sample[5]$};
+
+                        \draw [dashed, visible on=<3-5>] (2cm, 0cm) -- (2cm, 10cm);
+                        \draw [dashed, visible on=<6-7>] (3.1cm, 0cm) -- (3.1cm, 10cm);
+                        \draw [dashed, visible on=<8-9>] (2.1cm, 0cm) -- (2.1cm, 10cm);
+
+                        \draw[fill=gray!50, draw=gray!50,semitransparent] (1.75cm,1.75cm) rectangle (2.25cm,2.25cm);
+                        \node [red](x) at (2cm,2cm) {$\bullet$};
+                        \node [below right = -0.32cm and -0.32cm of x]{$\scriptscriptstyle \vinput$};
+
+                        \end{axis}
+            \end{tikzpicture}
+        \end{subfigure}
+        \begin{subfigure}{0.4\linewidth}
+            \centering
+            \begin{tikzpicture}[>=latex, scale=0.7, baseline={(2.7cm,1cm)}]
+
+                \tikzset{% This is the style settings for nodes
+                vertex/.style={circle,minimum size=1cm,fill=#1,draw,
+                                        general shadow={fill=gray!60,shadow xshift=1pt,shadow yshift=-1pt}}}
+
+
+                \node [vertex=green!25, visible on=<2->](s_1) at (3,10) {$\sample[1]$};
+                \node [vertex=green!25, visible on=<2->](s_2) at (1,8) {$\sample[2]$};
+                \node [vertex=blue!25, visible on=<2->](s_3) at (5,8) {$\sample[3]$};
+                \node [vertex=blue!25, visible on=<2->](s_4) at (1,5) {$\sample[4]$};
+                \node [vertex=blue!25, visible on=<2->](s_5) at (5,5) {$\sample[5]$};
+
+                \draw [->,very thick, visible on=<10->] (s_1) -- (s_2);
+                \draw [->,very thick, visible on=<10->] (s_1) -- (s_3);
+                \draw [->,very thick, visible on=<10->] (s_1) to[bend right=70] (s_4);
+                \draw [->,very thick, visible on=<10->] (s_1) to[bend left=70] (s_5);
+
+                \draw [->,very thick, visible on=<4->] (s_2) to[bend right=10] (s_3);
+                \draw [->,very thick, visible on=<9->] (s_2) to[bend right=10] (s_4);
+                \draw [->,very thick, visible on=<11->](s_2) -- (s_5);
+
+                \draw [->,very thick, visible on=<5->] (s_3) to[bend right=10] (s_2);
+                \draw [->,very thick, visible on=<7->] (s_3) -- (s_4);
+                \draw [->,very thick, visible on=<7->] (s_3) -- (s_4);
+                \draw [->,very thick, visible on=<11->](s_3) -- (s_5);
+
+                \draw [->,very thick, visible on=<9->] (s_4) to[bend right=10] (s_2);
+                \draw [->,very thick, visible on=<11->] (s_4) -- (s_5);
+
+
+            \end{tikzpicture}
+        \end{subfigure}
+    \end{figure}
+\end{frame}
+
+
+\begin{frame}<1-5>[fragile, label=graph-traversal]{Graph Traversal}
+    \only<2-3>{$k=1$}
+    \only<3>{--- Labels = $\{\textit{green}\}$}
+    \only<3>{--- Stable = YES}
+    \only<4-10>{$k=3$}
+    \only<6-9>{--- Labels = $\{\textit{green}\}$}
+    \only<10>{--- Labels = $\{\textit{green, blue}\}$}
+    \only<10>{--- Stable = NO}
+    % \only<11->{$k=5$}
+    % \only<13>{--- Labels = $\{\textit{blue}\}$}
+    % \only<13>{--- Stable = YES}
+    \begin{figure}[h]
+        \centering
+        \begin{subfigure}{0.45\linewidth}
+            \begin{tikzpicture}[>=latex, scale=0.7, baseline={(-1cm,-1cm)}]
+
+                \tikzset{% This is the style settings for nodes
+                    yshift=-1.5cm,
+                    xshift=-1.5cm,
+                    vertex/.style={circle,minimum size=0.5cm,fill=#1,draw,
+                                        general shadow={fill=gray!60,shadow xshift=1pt,shadow yshift=-1pt}}}
+
+
+                    \node [vertex=green!25](s_1) at (1,8) {$\sample[1]$};
+                    \node [vertex=green!25](s_2) at (-1,6) {$\sample[2]$};
+                    \node [vertex=blue!25](s_3) at (3,6) {$\sample[3]$};
+                    \node [vertex=blue!25](s_4) at (-1,3) {$\sample[4]$};
+                    \node [vertex=blue!25](s_5) at (3,3) {$\sample[5]$};
+
+                    \draw [->,very thick] (s_1) -- (s_2);
+                    \draw [->,very thick] (s_1) -- (s_3);
+                    \draw [->,very thick] (s_1) to[bend right=70] (s_4);
+                    \draw [->,very thick] (s_1) to[bend left=70] (s_5);
+
+                    \draw [->,very thick] (s_2) to[bend right=10] (s_3);
+                    \draw [->,very thick] (s_2) to[bend right=10] (s_4);
+                    \draw [->,very thick](s_2) -- (s_5);
+
+                    \draw [->,very thick] (s_3) to[bend right=10] (s_2);
+                    \draw [->,very thick] (s_3) -- (s_4);
+                    \draw [->,very thick] (s_3) -- (s_4);
+                    \draw [->,very thick](s_3) -- (s_5);
+
+                    \draw [->,very thick] (s_4) to[bend right=10] (s_2);
+                    \draw [->,very thick] (s_4) -- (s_5);
+
+            \end{tikzpicture}
+        \end{subfigure}
+        \onslide<2->{\rulesep}
+        \begin{subfigure}{0.4\linewidth}
+            \centering
+            \begin{tikzpicture}[>=latex, scale=0.7, baseline={(2.7cm,1cm)}]
+
+                \tikzset{% This is the style settings for nodes
+                vertex/.style={circle,minimum size=0.5cm,fill=#1,draw,
+                                        general shadow={fill=gray!60,shadow xshift=1pt,shadow yshift=-1pt}},
+                cross/.style={
+                    decoration={markings, mark=at position 0.5 with {
+                        \node[scale=1.5, inner sep=0pt] {$\times$};
+                    }},
+                    postaction={decorate}
+                }}
+
+                \node [vertex=green!25, visible on=<2->](s_1) at (3,10) {$\sample[1]$};
+                \node [vertex=green!25, visible on=<5-10>](s_12) at (1,8.5) {$\sample[2]$};
+                \node [vertex=blue!25, visible on=<5-10>](s_123) at (1,6.5) {$\sample[3]$};
+                \node [vertex=blue!25, visible on=<7-8>](s_124) at (3,6.5) {$\sample[4]$};
+                \node [vertex=blue!25, visible on=<9-10>](s_13) at (3,8) {$\sample[3]$};
+                \node [vertex=blue!25, visible on=<9-10>](s_134) at (3,6) {$\sample[4]$};
+                % \node [vertex=green!25, visible on=<12->](s_12_) at (3,8) {$\sample[2]$};
+                % \node [vertex=blue!25, visible on=<12->](s_123_) at (3,6) {$\sample[3]$};
+                % \node [vertex=blue!25, visible on=<12->](s_1234_) at (3,4) {$\sample[4]$};
+                % \node [vertex=blue!25, visible on=<12->](s_12345_) at (3,2) {$\sample[5]$};
+
+                \draw [->,very thick, visible on=<5-10>] (s_1) -- (s_12);
+                \draw [->,very thick, visible on=<5-10>] (s_12) -- (s_123);
+                \draw [->,very thick, visible on=<7>] (s_12) -- (s_124);
+                \draw [cross, ->,very thick, visible on=<8>] (s_12) -- (s_124);
+                \draw [->,very thick, visible on=<9-10>] (s_1) -- (s_13);
+                \draw [->,very thick, visible on=<9-10>] (s_13) -- (s_134);
+                % \draw [->,very thick, visible on=<12->] (s_1) -- (s_12_);
+                % \draw [->,very thick, visible on=<12->] (s_12_) -- (s_123_);
+                % \draw [->,very thick, visible on=<12->] (s_123_) -- (s_1234_);
+                % \draw [->,very thick, visible on=<12->] (s_1234_) -- (s_12345_);
+
+            \end{tikzpicture}
+        \end{subfigure}
+    \end{figure}
+\end{frame}
+
+\begin{frame}<1>[fragile, label=validity-region]{Graph Construction}
+    \begin{figure}[h]
+        \centering
+        \begin{tikzpicture}[>=latex, scale=0.9]
+            \centering
+            \begin{axis}[
+                xmin = 0, xmax = 2,
+                ymin = 0, ymax = 2,
+                xtick distance = 1,
+                ytick distance = 1,
+                grid = both,
+                minor tick num = 10,
+                major grid style = {lightgray},
+                minor grid style = {lightgray!75},
+                width = 8cm,
+                height = 8cm,
+                axis x line=center,
+                axis y line=center,
+                xlabel = {$x$},
+                ylabel = {$y$},
+                xlabel style={above left},
+                ylabel style={below right}]
+
+                    % draws point
+                    \node [green, mark=*](x_2) at (1cm,1.8cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x_2]{ $\scriptscriptstyle \sample[2]$};
+                    \node [green](x_1) at (2cm,1.6cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x_1]{$\scriptscriptstyle \sample[1]$};
+                    \node [blue](x_3) at (3cm,1.8cm) {$\bullet$};
+                    \node [below right = -0.25cm and -0.50cm of x_3]{$\scriptscriptstyle \sample[3]$};
+                    \node [blue](x_4) at (3.2cm,1.8cm) {$\bullet$};
+                    \node [below right = -0.60cm and -0.32cm of x_4]{$\scriptscriptstyle \sample[4]$};
+                    \node [blue](x_5) at (3cm,3.4cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x_5]{$\scriptscriptstyle \sample[5]$};
+
+                    \draw[fill=green, draw=green!50,semitransparent, visible on=<1>] (1.75cm,1.75cm) rectangle (2.1cm,2.25cm);
+                    \draw[fill=blue, draw=blue!50,semitransparent, visible on=<2>] (2.1cm,1.75cm) rectangle (2.25cm,2.25cm);
+                    % \draw[fill=blue, draw=blue!50,semitransparent, visible on=<3>] (1.75cm,1.75cm) rectangle (2.1cm,2.25cm);
+
+
+                    \draw[fill=gray!50, draw=gray!50,semitransparent] (1.75cm,1.75cm) rectangle (2.25cm,2.25cm);
+                    \node [red](x) at (2cm,2cm) {$\bullet$};
+                    \node [below right = -0.32cm and -0.32cm of x]{$\scriptscriptstyle \vinput$};
+
+                    \end{axis}
+        \end{tikzpicture}
+    \end{figure}
+\end{frame}
+
+\againframe<6-9>{graph-traversal}
+\againframe<2>{validity-region}
+\againframe<10>{graph-traversal}
+% \againframe<10-12>{graph-traversal}
+% \againframe<3>{validity-region}
+% \againframe<13->{graph-traversal}
+
+
+\begin{frame}{Graph Traversal-Summary}
+
+    \begin{itemize}
+        \item Start traversal of the graph from sample $\sample[i]$ not dominated by any other samples;
+
+        \item Consider only the paths $[\sample[1], \sample[2], \ldots, \sample[k]]$ such that
+            $\sample[1], \sample[2], \ldots, \sample[k]$ are the closest samples to some $x' \in P^{\epsilon}(\vinput)$ than any other samples;
+    \end{itemize}
+\end{frame}
+
+

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar, Self, Sequence
-from scipy.optimize import linprog, LinearConstraint # type: ignore
+from scipy.optimize import linprog
 import numpy as np
 
 from ..utils.base_types import Array1xN, ArrayNxM, NDArray
@@ -30,8 +30,7 @@ class Polyhedron:
       A_eq = self.equalities_lhs,
       b_eq = self.equalities_rhs,
       bounds = self.bounds,
-      method= 'highs-ipm',
-      options={'ipm_optimality_tolerance': 1e-5}
+      method= 'highs-ipm'
     )
 
     return solution.x
@@ -48,8 +47,7 @@ class Polyhedron:
       A_eq = self.equalities_lhs,
       b_eq = self.equalities_rhs,
       bounds = self.bounds,
-      method= 'highs-ipm',
-      options={'ipm_optimality_tolerance': 1e-5}
+      method= 'highs-ds'
     )
     return solution.success # type: ignore
 
