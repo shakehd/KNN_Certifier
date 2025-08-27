@@ -1,14 +1,14 @@
 # Robustness Verification of *k*-Nearest neighbours
 
-Implementation of an abstract interpretation-based tool for proving robustness and stability properties of *k*NN classifiers.
+Implementation of an abstract interpretation-based tool for certifiying robustness and stability properties of *k*NN classifiers.
 
 ## Requirements
 - Python3
 
 ## Installation
-To install this toool you need to clone or download this repository and run the commands:
+To install this tool you need to clone or download this repository and run the commands:
 ```[bash]
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 This will install the following dependencies:
 - joblib==1.4.2
@@ -44,8 +44,14 @@ can be one of the following:
 | --random-state RANDOM | Random seed used when partitioning the dataset. |
 | --partition-size SIZE | Maximum number of data points in a partition (default 100). |
 | --log  {INFO,DEBUG,ERROR}  | Log level used during the verification phase (default ERROR).  |
-| --all-labels  | Compute all labels. (default False)  |
+| --retrieve-all-labels  | onsider all labels during classification (default False)  |
 | --no-parallel | Classify points sequentially (default False).  |
+| --no-early-stopping | Disable early stopping optimization (default False).  |
+| --no-majority-prunning | Disable majority prunning optimization (default False).  |
+| --no-early-majority-detection | Disable majority prunning optimization (default False).  |
+| --no-path-length-bounds | Disable path length bounds optimization (default False).  |
+| --no-path-length-bounds | Disable path length bounds optimization (default False).  |
+| --consider-all-permutations | Consider all samples permutations during classification (default False).  |
 | -h, --help  | Show help message and exit.  |
 
 For example
@@ -54,7 +60,7 @@ For example
 python certify.py fourclass_5_percent --partition-size 100 --log info
 ```
 **Warning**
-For parallizzation the FORK method is used. Since this is only available in Unix systems this tool will not work on windows systems --no-parallel option is not set.
+For parallizzation the FORK method is used. Since this is only available in Linux systems this tool will not work on windows systems. To use on Windows OS use the --no-parallel flag.
 
 ## Results
 After the certification process is finished the tool will save the results in 4 files:
@@ -87,7 +93,7 @@ logs = "./logs""
 where the `base_dirs` contains the following settings:
 
 - `config`: directory where the configuration files are located (default ./config).
-- `dataset_dir`: directory where datasets are located  (default ./dataset).
+- `dataset_dir`: directory where datasets are located  (default ../dataset).
 - `result`: directory where the verification results are saved  (default ./result).
 - `logs`: directory where the logs are saved  (default ./logs).
 
@@ -97,7 +103,6 @@ The *verification*.toml has the following form:
 ```
 [knn_params]
 k_values = [list of k values]
-distance_metric = "distance metric (euclidean or manhattan)"
 
 [dataset]
 format = "dataset format (libsvm or csv)"
@@ -111,7 +116,6 @@ It has three section:
 
 - `knn_params`:
   - `k_values`: list of possible values for the number of nearest neighbours to consider for each prediction.
-  - `distance_metric`: The metric used to measure the distance between data points
 
 - `dataset`:
   - `format`: The format of the dataset which can be *libsvm* or *csv*.
