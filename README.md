@@ -76,11 +76,11 @@ For the experimental results reported in the paper [[1]](#1) we used WSL2 Arch L
 > For parallizzation the FORK method is used. Since this is only available in Linux systems this tool will not work on windows systems. To use on Windows OS use the --no-parallel flag.
 
 ## Results
-After the certification process is finished the tool will save the results under the folder _.\results\CONFIGFILE_. This folder contains the following files::
+After the certification process is finished the tool will save the results under a folder named _results_ that will be created in the main folder. Inside, a subfolder named after the configuration file (i.e _CONFIGFILE_) contains four files:
 - **classification.csv**: contains the classifications results for each value of k.
 - **robustness.csv**: contains the robustness results for each value of k.
 - **stability.csv**: contains the stability results for each value of k.
-- **overall_result.csv**: contains the runtime information and the overall robustness and stability percentage of the _k_NN for the dataset and ε specified in the _CONFIGFILE_ file.
+- **overall_result.csv**: contains the runtime information and the overall robustness and stability percentage of the *k*NN for the dataset and ε specified in the _CONFIGFILE_ file.
                           
 ## Configurations
 
@@ -146,4 +146,5 @@ It has three section:
 ## References
 <a id="1">[1]</a>
 Francesco Ranzato, Ahmad Shakeel, and Marco Zanella. 2025. Exact Robustness Certification of k-Nearest Neighbors. In Proceedings of the 2025 ACM SIGSAC Conference on Computer and Communications Security (CCS ’25), October 13–17, 2025, Taipei, Taiwan. ACM, New York, NY, USA, 15 pages. https://doi.org/10.1145/3719027.3765140
+
 
